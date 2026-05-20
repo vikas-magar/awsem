@@ -3,6 +3,7 @@ use actix_web::{web, HttpRequest, HttpResponse};
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use serde_json::{json, Value};
 
+#[tracing::instrument(skip(req, body, state))]
 pub async fn handle(
     req: HttpRequest,
     body: bytes::Bytes,

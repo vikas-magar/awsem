@@ -11,6 +11,7 @@ fn default_pool_id() -> &'static str {
     "us-east-1_default"
 }
 
+#[tracing::instrument(skip(req, body, state))]
 pub async fn handle(
     req: HttpRequest,
     body: bytes::Bytes,

@@ -12,6 +12,7 @@ fn find_secret(input: &Value, state: &AppState) -> Result<store::Secret, HttpRes
         .or_else(|_| store::get_secret_by_arn(&state.db, secret_id))
         .map_err(|e| awsem_core::error::AwsemError::NotFound(e).secrets_response())
 }
+#[tracing::instrument(skip(req, body, state))]
 pub async fn handle(
     req: HttpRequest,
     body: bytes::Bytes,

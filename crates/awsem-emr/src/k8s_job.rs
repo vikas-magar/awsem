@@ -17,6 +17,7 @@ fn get_vc_info(state: &AppState, vc_id: &str) -> Option<(String, String)> {
     ).ok()
 }
 
+#[tracing::instrument(skip(state, body))]
 pub async fn start_job_run(
     state: web::Data<AppState>,
     path: web::Path<String>,

@@ -1,6 +1,13 @@
 use crate::AppState;
 use actix_web::{web, HttpResponse};
+use serde::Deserialize;
 use serde_json::{json, Value};
+
+#[derive(Deserialize)]
+pub struct ListQuery {
+    #[serde(rename = "FunctionName")]
+    pub function_name: Option<String>,
+}
 
 pub async fn create(
     state: web::Data<AppState>,
@@ -32,9 +39,9 @@ pub async fn create(
 
 pub async fn list(
     state: web::Data<AppState>,
-    query: web::Query<Value>,
+    query: web::Query<ListQuery>,
 ) -> HttpResponse {
-    let fn_arn = query.get("FunctionName").and_then(|v| v.as_str());
+    let fn_arn = query.function_name.as_deref();
     let c = match state.db.lock() {
         Ok(c) => c,
         Err(e) => return awsem_core::error::AwsemError::Internal(e.to_string()).to_response(),

@@ -1,9 +1,13 @@
 use crate::AppState;
+use futures::StreamExt;
 use k8s_openapi::api::batch::v1::Job;
 use kube::api::PostParams;
+use kube::runtime::watcher;
+use kube::runtime::WatchStreamExt;
 use serde_json::json;
 use uuid::Uuid;
 
+#[tracing::instrument(skip(state), fields(name = %name))]
 pub async fn run(
     name: &str,
     payload: &str,
@@ -17,7 +21,7 @@ pub async fn run(
         }
     };
 
-    let func = {
+    let (handler, image, timeout) = {
         let c = match state.db.lock() {
             Ok(c) => c,
             Err(e) => return json!({"statusCode": 500, "body": format!("DB error: {e}")}).to_string(),
@@ -32,13 +36,11 @@ pub async fn run(
         }
     };
 
-    let image = match &func.1 {
-        Some(img) => img.clone(),
+    let image = match image {
+        Some(img) => img,
         None => match &state.lambda_runtime_image {
             Some(img) => img.clone(),
-            None => {
-                return json!({"statusCode": 500, "body": String::from("No Lambda runtime image configured")}).to_string();
-            }
+            None => return json!({"statusCode": 500, "body": String::from("No Lambda runtime image configured")}).to_string(),
         },
     };
 
@@ -49,10 +51,7 @@ pub async fn run(
     let job_obj: Job = serde_json::from_value(json!({
         "apiVersion": "batch/v1",
         "kind": "Job",
-        "metadata": {
-            "name": job_name,
-            "namespace": namespace,
-        },
+        "metadata": { "name": job_name, "namespace": namespace },
         "spec": {
             "backoffLimit": 0,
             "ttlSecondsAfterFinished": 60,
@@ -64,7 +63,7 @@ pub async fn run(
                         "image": image,
                         "imagePullPolicy": "IfNotPresent",
                         "env": [
-                            {"name": "_HANDLER", "value": func.0},
+                            {"name": "_HANDLER", "value": handler},
                             {"name": "_PAYLOAD", "value": payload},
                         ]
                     }]
@@ -74,61 +73,58 @@ pub async fn run(
     }))
     .expect("static JSON should be valid");
 
-    let api: kube::Api<Job> = kube::Api::namespaced(client.clone(), namespace);
-    if let Err(e) = api.create(&PostParams::default(), &job_obj).await {
+    let job_api: kube::Api<Job> = kube::Api::namespaced(client.clone(), namespace);
+    if let Err(e) = job_api.create(&PostParams::default(), &job_obj).await {
         return json!({"statusCode": 500, "body": format!("Failed to create K8s Job: {e}")}).to_string();
     }
-    tracing::info!("Created K8s Job {job_name} for Lambda {name}");
+    tracing::info!(job_name, "Created K8s Job for Lambda");
 
-    let timeout_secs = func.2.max(3) as u64 + 10;
+    let pod_api: kube::Api<k8s_openapi::api::core::v1::Pod> =
+        kube::Api::namespaced(client.clone(), namespace);
+
+    let timeout_secs = timeout.max(3) as u64 + 10;
     let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_secs(timeout_secs);
 
-    let pod_api: kube::Api<k8s_openapi::api::core::v1::Pod> = kube::Api::namespaced(client.clone(), namespace);
+    let watch_config = watcher::Config::default().labels(&format!("job-name={job_name}"));
+    let mut stream = watcher(pod_api.clone(), watch_config)
+        .applied_objects()
+        .boxed();
 
     loop {
-        if tokio::time::Instant::now() >= deadline {
-            let _ = api.delete(&job_name, &Default::default()).await;
-            return json!({"statusCode": 500, "body": String::from("Lambda timed out")}).to_string();
-        }
-        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-
-        let pods = pod_api
-            .list(&kube::api::ListParams::default().labels(&format!("job-name={job_name}")))
-            .await;
-
-        let pods = match pods {
-            Ok(p) => p,
-            Err(_) => continue,
-        };
-
-        let pod = match pods.items.into_iter().next() {
-            Some(p) => p,
-            None => continue,
-        };
-
-        let phase = pod
-            .status
-            .as_ref()
-            .and_then(|s| s.phase.as_deref())
-            .unwrap_or("");
-
-        if phase == "Succeeded" || phase == "Failed" {
-            let log_result = pod_api
-                .logs(pod.metadata.name.as_deref().unwrap_or(""), &Default::default())
-                .await;
-
-            let _ = api.delete(&job_name, &Default::default()).await;
-
-            return match log_result {
-                Ok(logs) => {
-                    if phase == "Succeeded" {
-                        logs.trim().to_string()
-                    } else {
-                        json!({"statusCode": 500, "body": logs}).to_string()
+        tokio::select! {
+            Some(item) = stream.next() => {
+                let pod = match item {
+                    Ok(p) => p,
+                    Err(e) => {
+                        tracing::warn!("Watch error: {e}");
+                        continue;
                     }
+                };
+                let phase = pod.status.as_ref()
+                    .and_then(|s| s.phase.as_deref())
+                    .unwrap_or("");
+
+                if phase == "Succeeded" || phase == "Failed" {
+                    let pod_name = pod.metadata.name.as_deref().unwrap_or("");
+                    let log_result = pod_api.logs(pod_name, &Default::default()).await;
+                    let _ = job_api.delete(&job_name, &Default::default()).await;
+
+                    return match log_result {
+                        Ok(logs) => {
+                            if phase == "Succeeded" {
+                                logs.trim().to_string()
+                            } else {
+                                json!({"statusCode": 500, "body": logs}).to_string()
+                            }
+                        }
+                        Err(e) => json!({"statusCode": 500, "body": format!("Log read error: {e}")}).to_string(),
+                    };
                 }
-                Err(e) => json!({"statusCode": 500, "body": format!("Log read error: {e}")}).to_string(),
-            };
+            }
+            _ = tokio::time::sleep_until(deadline) => {
+                let _ = job_api.delete(&job_name, &Default::default()).await;
+                return json!({"statusCode": 500, "body": String::from("Lambda timed out")}).to_string();
+            }
         }
     }
 }

@@ -72,11 +72,10 @@ pub async fn wait_ready(client: &Client, ns: &str) -> Result<(), Box<dyn std::er
     for _ in 0..60 {
         let list = pods.list(&ListParams::default().labels("app=rustfs")).await?;
         for p in list {
-            if let Some(status) = p.status {
-                if status.phase == Some("Running".into()) {
+            if let Some(status) = p.status
+                && status.phase == Some("Running".into()) {
                     return Ok(());
                 }
-            }
         }
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
     }

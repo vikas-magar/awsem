@@ -3,6 +3,7 @@ use actix_web::{web, HttpResponse};
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use serde_json::{json, Value};
 
+#[tracing::instrument(skip(state, body))]
 pub async fn create(
     state: web::Data<AppState>,
     body: bytes::Bytes,

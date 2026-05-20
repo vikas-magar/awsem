@@ -8,8 +8,8 @@ pub fn build_args(
 ) -> Vec<String> {
     let mut args: Vec<String> = Vec::new();
 
-    if let Some(driver) = job_driver.get("sparkSubmitJobDriver") {
-        if let Some(params_str) = driver.get("sparkSubmitParameters").and_then(|v| v.as_str()) {
+    if let Some(driver) = job_driver.get("sparkSubmitJobDriver")
+        && let Some(params_str) = driver.get("sparkSubmitParameters").and_then(|v| v.as_str()) {
             let parts: Vec<&str> = params_str.split_whitespace().collect();
             let mut i = 0;
             while i < parts.len() {
@@ -26,7 +26,6 @@ pub fn build_args(
                 i += 1;
             }
         }
-    }
 
     args.push("--master".into());
     args.push("k8s://https://kubernetes.default.svc".into());

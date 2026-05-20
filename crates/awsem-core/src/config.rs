@@ -31,5 +31,8 @@ pub struct AppConfig {
     pub no_lambda: bool,
 
     #[arg(long)]
+    pub lambda_runtime_image: Option<String>,
+
+    #[arg(long)]
     pub data_dir: Option<String>,
 }

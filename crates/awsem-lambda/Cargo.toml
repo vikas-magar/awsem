@@ -19,8 +19,7 @@ awsem-events = { path = "../awsem-events" }
 chrono = { version = "0.4", features = ["serde"] }
 base64 = "0.22"
 bytes = "1"
-bollard = "0.18"
 tokio = { version = "1", features = ["full"] }
-reqwest = { version = "0.12", features = ["json"] }
 futures = "0.3"
-aws_lambda_events = "1.2"
+kube = { version = "0.98", features = ["client", "ws"] }
+k8s-openapi = { version = "0.24", features = ["v1_32"] }

@@ -64,6 +64,9 @@ async fn main() -> anyhow::Result<()> {
         db: conn.clone(),
         event_bus: event_bus.clone(),
         data_dir: config.data_dir.clone(),
+        kube_client: kube_client.clone(),
+        namespace: config.k8s_namespace.clone(),
+        lambda_runtime_image: config.lambda_runtime_image.clone(),
     };
     if !config.no_emr {
         let db = conn.clone();
@@ -75,6 +78,10 @@ async fn main() -> anyhow::Result<()> {
             awsem_emr::job_watcher::watch_jobs(db, kc, url, client, bus).await;
         });
     }
+    let lambda_trigger_state = lambda_state.clone();
+    tokio::spawn(async move {
+        awsem_lambda::trigger::listen(lambda_trigger_state).await;
+    });
     let server = HttpServer::new(move || {
         App::new()
             .app_data(web::Data::new(cognito_state.clone()))

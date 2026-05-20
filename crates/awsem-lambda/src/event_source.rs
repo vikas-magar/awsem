@@ -1,8 +1,15 @@
 use crate::AppState;
-use actix_web::HttpResponse;
+use actix_web::{web, HttpResponse};
 use serde_json::{json, Value};
 
-pub async fn create_mapping(input: Value, state: &AppState) -> HttpResponse {
+pub async fn create(
+    state: web::Data<AppState>,
+    body: bytes::Bytes,
+) -> HttpResponse {
+    let input: Value = match serde_json::from_slice(&body) {
+        Ok(v) => v,
+        Err(e) => return awsem_core::error::AwsemError::InvalidRequest(e.to_string()).to_response(),
+    };
     let fn_arn = input.get("FunctionName").and_then(|v| v.as_str()).unwrap_or("");
     let event_arn = input.get("EventSourceArn").and_then(|v| v.as_str()).unwrap_or("");
     let batch = input.get("BatchSize").and_then(|v| v.as_i64()).unwrap_or(10) as i32;
@@ -23,8 +30,11 @@ pub async fn create_mapping(input: Value, state: &AppState) -> HttpResponse {
     }))
 }
 
-pub async fn list_mappings(input: Value, state: &AppState) -> HttpResponse {
-    let fn_arn = input.get("FunctionName").and_then(|v| v.as_str());
+pub async fn list(
+    state: web::Data<AppState>,
+    query: web::Query<Value>,
+) -> HttpResponse {
+    let fn_arn = query.get("FunctionName").and_then(|v| v.as_str());
     let c = match state.db.lock() {
         Ok(c) => c,
         Err(e) => return awsem_core::error::AwsemError::Internal(e.to_string()).to_response(),
@@ -54,17 +64,20 @@ pub async fn list_mappings(input: Value, state: &AppState) -> HttpResponse {
             Err(e) => return awsem_core::error::AwsemError::Internal(e.to_string()).to_response(),
         }
     }
-    HttpResponse::Ok().json(json!({"EventSourceMappings": mappings, "NextMarker": null}))
+    HttpResponse::Ok().json(json!({"EventSourceMappings": mappings, "NextMarker": serde_json::Value::Null}))
 }
 
-pub async fn delete_mapping(input: Value, state: &AppState) -> HttpResponse {
-    let uuid = input.get("UUID").and_then(|v| v.as_str()).unwrap_or("");
+pub async fn delete(
+    state: web::Data<AppState>,
+    path: web::Path<String>,
+) -> HttpResponse {
+    let uuid = path.into_inner();
     let c = match state.db.lock() {
         Ok(c) => c,
         Err(e) => return awsem_core::error::AwsemError::Internal(e.to_string()).to_response(),
     };
     if c.execute("DELETE FROM lambda_event_source_mappings WHERE id = ?1", rusqlite::params![uuid]).is_err() {
-        return awsem_core::error::AwsemError::NotFound(uuid.into()).to_response();
+        return awsem_core::error::AwsemError::NotFound(uuid).to_response();
     }
     HttpResponse::Ok().json(json!({}))
 }

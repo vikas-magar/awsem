@@ -11,6 +11,9 @@ pub fn open(path: &str) -> Result<DbConn, Box<dyn std::error::Error>> {
 
 pub fn init_schema(conn: &DbConn) -> Result<(), Box<dyn std::error::Error>> {
     let sql = include_str!("../schema.sql");
-    conn.lock().unwrap().execute_batch(sql)?;
+    let c = conn.lock().unwrap();
+    c.execute_batch(sql).ok();
+    // migration: add image column if missing (harmless if already present)
+    let _ = c.execute("ALTER TABLE lambda_functions ADD COLUMN image TEXT", []);
     Ok(())
 }

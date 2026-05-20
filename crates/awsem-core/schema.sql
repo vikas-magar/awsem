@@ -90,6 +90,7 @@ CREATE TABLE IF NOT EXISTS lambda_functions (
     arn           TEXT NOT NULL UNIQUE,
     runtime       TEXT NOT NULL,
     handler       TEXT NOT NULL,
+    image         TEXT,
     code_zip      BLOB,
     role          TEXT NOT NULL,
     timeout       INTEGER DEFAULT 3,

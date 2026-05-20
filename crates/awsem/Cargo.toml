@@ -1,0 +1,22 @@
+[package]
+name = "awsem"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+actix-web = "4"
+actix-rt = "2"
+clap = { version = "4", features = ["derive"] }
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+reqwest = { version = "0.12", features = ["stream"] }
+serde_json = "1"
+anyhow = "1"
+awsem-core = { path = "../awsem-core" }
+awsem-s3 = { path = "../awsem-s3" }
+awsem-cognito = { path = "../awsem-cognito" }
+awsem-secretsmanager = { path = "../awsem-secretsmanager" }
+awsem-emr = { path = "../awsem-emr" }
+awsem-lambda = { path = "../awsem-lambda" }
+awsem-events = { path = "../awsem-events" }

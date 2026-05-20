@@ -1,0 +1,26 @@
+[package]
+name = "awsem-lambda"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "awsem_lambda"
+
+[dependencies]
+actix-web = "4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+anyhow = "1"
+uuid = { version = "1", features = ["v4"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+awsem-core = { path = "../awsem-core" }
+awsem-events = { path = "../awsem-events" }
+chrono = { version = "0.4", features = ["serde"] }
+base64 = "0.22"
+bytes = "1"
+bollard = "0.18"
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", features = ["json"] }
+futures = "0.3"
+aws_lambda_events = "1.2"

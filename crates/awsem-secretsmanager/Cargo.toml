@@ -1,0 +1,22 @@
+[package]
+name = "awsem-secretsmanager"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "awsem_secretsmanager"
+
+[dependencies]
+actix-web = "4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+anyhow = "1"
+uuid = { version = "1", features = ["v4"] }
+rand = "0.8"
+chrono = { version = "0.4", features = ["serde"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+awsem-core = { path = "../awsem-core" }
+awsem-events = { path = "../awsem-events" }
+tokio = { version = "1", features = ["full"] }
+bytes = "1"

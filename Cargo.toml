@@ -1,0 +1,12 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/awsem",
+    "crates/awsem-core",
+    "crates/awsem-s3",
+    "crates/awsem-cognito",
+    "crates/awsem-secretsmanager",
+    "crates/awsem-emr",
+    "crates/awsem-lambda",
+    "crates/awsem-events",
+]

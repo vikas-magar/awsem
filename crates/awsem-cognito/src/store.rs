@@ -38,6 +38,7 @@ pub fn get_user_pool(conn: &DbConn, pool_id: &str) -> Result<UserPool, String> {
     ).map_err(|e| e.to_string())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn create_user(
     conn: &DbConn,
     id: &str,
@@ -46,11 +47,21 @@ pub fn create_user(
     password_hash: &str,
     email: Option<&str>,
     attributes_json: &str,
+    status: &str,
 ) -> Result<(), String> {
     let c = conn.lock().map_err(|e| e.to_string())?;
     c.execute(
-        "INSERT INTO cognito_users (id, pool_id, username, password_hash, email, status, attributes_json) VALUES (?1, ?2, ?3, ?4, ?5, 'CONFIRMED', ?6)",
-        rusqlite::params![id, pool_id, username, password_hash, email, attributes_json],
+        "INSERT INTO cognito_users (id, pool_id, username, password_hash, email, status, attributes_json) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        rusqlite::params![id, pool_id, username, password_hash, email, status, attributes_json],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn confirm_user(conn: &DbConn, username: &str, pool_id: &str) -> Result<(), String> {
+    let c = conn.lock().map_err(|e| e.to_string())?;
+    c.execute(
+        "UPDATE cognito_users SET status = 'CONFIRMED' WHERE username = ?1 AND pool_id = ?2",
+        rusqlite::params![username, pool_id],
     ).map_err(|e| e.to_string())?;
     Ok(())
 }

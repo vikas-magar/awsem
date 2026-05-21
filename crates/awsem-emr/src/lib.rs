@@ -1,3 +1,4 @@
+pub mod job_runs;
 pub mod job_watcher;
 pub mod k8s_job;
 pub mod releases;
@@ -14,6 +15,7 @@ pub struct AppState {
     pub event_bus: broadcast::Sender<awsem_events::BusEvent>,
     pub k8s_client: Option<kube::Client>,
     pub namespace: String,
+    pub emr_spark_image: Option<String>,
 }
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -22,6 +24,10 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .route("", web::post().to(virtual_cluster::create))
             .route("", web::get().to(virtual_cluster::list))
             .route("/{id}", web::delete().to(virtual_cluster::delete))
-            .route("/{vc_id}/jobruns", web::post().to(k8s_job::start_job_run)),
+            .route("/{vc_id}/jobruns", web::post().to(k8s_job::start_job_run))
+            .route("/{vc_id}/jobruns", web::get().to(job_runs::list))
+            .route("/{vc_id}/jobruns/{jr_id}", web::get().to(job_runs::describe))
+            .route("/{vc_id}/jobruns/{jr_id}", web::delete().to(job_runs::cancel)),
     );
+    cfg.route("/releases", web::get().to(releases::handle_list));
 }

@@ -20,7 +20,10 @@ pub async fn watch_jobs(
         interval.tick().await;
         let jobs = match get_running_jobs(&db) {
             Ok(j) => j,
-            Err(_) => continue,
+            Err(e) => {
+                tracing::warn!("Failed to fetch running jobs: {e}");
+                continue;
+            }
         };
         for job in &jobs {
             if let Some(ref client) = k8s_client {
@@ -49,23 +52,33 @@ async fn check_k8s_status(
         match phase {
             "Succeeded" => {
                 tracing::info!("Job {} driver pod Succeeded", job.id);
-                let _ = db.lock().map(|c| c.execute(
-                    "UPDATE emr_job_runs SET state = 'COMPLETED' WHERE id = ?1",
-                    rusqlite::params![job.id],
-                ));
-                let _ = event_bus.send(BusEvent::S3Notification {
+                if let Ok(c) = db.lock()
+                    && let Err(e) = c.execute(
+                        "UPDATE emr_job_runs SET state = 'COMPLETED' WHERE id = ?1",
+                        rusqlite::params![job.id],
+                    )
+                {
+                    tracing::error!("Failed to update job state to COMPLETED: {e}");
+                }
+                if event_bus.send(BusEvent::S3Notification {
                     bucket: format!("emr-{}", job.vc_id),
                     key: format!("jobs/{}/_SUCCESS", job.id),
                     target_arn: format!("arn:aws:emr-containers:us-east-1:000000000000:/virtualclusters/{}/jobruns/{}", job.vc_id, job.id),
                     target_type: "emr".into(),
-                });
+                }).is_err() {
+                    tracing::warn!("No subscribers for S3Notification event");
+                }
             }
             "Failed" | "Unknown" => {
                 tracing::warn!("Job {} driver pod {}", job.id, phase);
-                let _ = db.lock().map(|c| c.execute(
-                    "UPDATE emr_job_runs SET state = 'FAILED' WHERE id = ?1",
-                    rusqlite::params![job.id],
-                ));
+                if let Ok(c) = db.lock()
+                    && let Err(e) = c.execute(
+                        "UPDATE emr_job_runs SET state = 'FAILED' WHERE id = ?1",
+                        rusqlite::params![job.id],
+                    )
+                {
+                    tracing::error!("Failed to update job state to FAILED: {e}");
+                }
             }
             _ => {}
         }
@@ -86,10 +99,14 @@ async fn check_s3_success(
     match http_client.head(&url).send().await {
         Ok(resp) if resp.status().is_success() => {
             tracing::info!("Job {} _SUCCESS found in S3", job.id);
-            let _ = db.lock().map(|c| c.execute(
-                "UPDATE emr_job_runs SET state = 'COMPLETED' WHERE id = ?1 AND state = 'RUNNING'",
-                rusqlite::params![job.id],
-            ));
+            if let Ok(c) = db.lock()
+                && let Err(e) = c.execute(
+                    "UPDATE emr_job_runs SET state = 'COMPLETED' WHERE id = ?1 AND state = 'RUNNING'",
+                    rusqlite::params![job.id],
+                )
+            {
+                tracing::error!("Failed to update job state via S3: {e}");
+            }
         }
         _ => {}
     }

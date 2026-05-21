@@ -21,7 +21,17 @@ pub async fn deploy(
             "resources": { "requests": { "storage": cfg.pvc_size } }
         }
     }))?;
-    let _ = pvc_api.create(&PostParams::default(), &pvc).await;
+    for attempt in 0..10 {
+        match pvc_api.create(&PostParams::default(), &pvc).await {
+            Ok(_) => break,
+            Err(kube::Error::Api(e)) if e.code == 409 && attempt < 9 => {
+                let _ = pvc_api.delete("rustfs-data", &DeleteParams::default()).await;
+                tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+            }
+            Err(kube::Error::Api(e)) if e.code == 409 => return Err(e.into()),
+            Err(e) => return Err(e.into()),
+        }
+    }
 
     let dep_api: Api<Deployment> = Api::namespaced(client.clone(), ns);
     let dep: Deployment = serde_json::from_value(json!({
@@ -49,7 +59,9 @@ pub async fn deploy(
             }
         }
     }))?;
-    let _ = dep_api.create(&PostParams::default(), &dep).await;
+    if let Err(e) = dep_api.create(&PostParams::default(), &dep).await {
+        tracing::warn!("Failed to create RustFS Deployment: {e}");
+    }
 
     let svc_api: Api<Service> = Api::namespaced(client.clone(), ns);
     let svc: Service = serde_json::from_value(json!({
@@ -61,7 +73,9 @@ pub async fn deploy(
             "ports": [{"port": 9000, "targetPort": 9000, "name": "s3"}]
         }
     }))?;
-    let _ = svc_api.create(&PostParams::default(), &svc).await;
+    if let Err(e) = svc_api.create(&PostParams::default(), &svc).await {
+        tracing::warn!("Failed to create RustFS Service: {e}");
+    }
 
     tracing::info!("RustFS deployed to namespace {ns}");
     Ok(())
@@ -101,13 +115,19 @@ pub async fn cleanup(
     let dp = DeleteParams::default();
 
     let dep_api: Api<Deployment> = Api::namespaced(client.clone(), ns);
-    let _ = dep_api.delete("rustfs", &dp).await;
+    if let Err(e) = dep_api.delete("rustfs", &dp).await {
+        tracing::warn!("Failed to delete RustFS Deployment: {e}");
+    }
 
     let svc_api: Api<Service> = Api::namespaced(client.clone(), ns);
-    let _ = svc_api.delete("rustfs-svc", &dp).await;
+    if let Err(e) = svc_api.delete("rustfs-svc", &dp).await {
+        tracing::warn!("Failed to delete RustFS Service: {e}");
+    }
 
     let pvc_api: Api<PersistentVolumeClaim> = Api::namespaced(client.clone(), ns);
-    let _ = pvc_api.delete("rustfs-data", &dp).await;
+    if let Err(e) = pvc_api.delete("rustfs-data", &dp).await {
+        tracing::warn!("Failed to delete RustFS PVC: {e}");
+    }
 
     tracing::info!("RustFS resources cleaned up from namespace {ns}");
     Ok(())

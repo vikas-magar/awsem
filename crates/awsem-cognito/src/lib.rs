@@ -1,3 +1,4 @@
+pub mod admin;
 pub mod handlers;
 pub mod jwt;
 pub mod store;

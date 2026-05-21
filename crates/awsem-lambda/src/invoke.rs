@@ -11,6 +11,9 @@ pub async fn handle(
     path: web::Path<String>,
 ) -> HttpResponse {
     let name = path.into_inner();
+    if let Err(msg) = crate::name::validate(&name) {
+        return awsem_core::error::AwsemError::InvalidRequest(format!("Invalid FunctionName: {msg}")).to_response();
+    }
     let invocation_type = req
         .headers()
         .get("X-Amz-Invocation-Type")
@@ -43,8 +46,7 @@ pub async fn handle(
             function_arn: func.1,
             payload: payload.to_string(),
         });
-        return HttpResponse::Accepted()
-            .json(json!({"StatusCode": 202}));
+        return HttpResponse::Accepted().finish();
     }
 
     let result = crate::execute::run(&func.0, &payload.to_string(), &state).await;

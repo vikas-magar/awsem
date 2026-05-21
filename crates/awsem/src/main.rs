@@ -1,53 +1,17 @@
+mod logging;
+
 use actix_web::{web, App, HttpServer};
 use awsem_core::config::AppConfig;
 use awsem_core::db;
 use awsem_core::k8s;
 use std::path::Path;
+use tokio::signal;
 use tokio::sync::broadcast;
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::{EnvFilter, Registry};
-
-fn map_err(e: Box<dyn std::error::Error>) -> anyhow::Error {
-    anyhow::anyhow!("{}", e)
-}
-
-fn init_logging(config: &AppConfig) -> Option<tracing_appender::non_blocking::WorkerGuard> {
-    let log_dir = config.resolved_log_dir();
-    let log_level = config.resolved_log_level();
-
-    if !Path::new(log_dir).exists() {
-        let _ = std::fs::create_dir_all(log_dir);
-    }
-
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(log_level));
-
-    let file_appender = tracing_appender::rolling::daily(log_dir, "awsem.log");
-    let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
-
-    Registry::default()
-        .with(filter)
-        .with(
-            tracing_subscriber::fmt::layer()
-                .with_writer(non_blocking)
-                .with_ansi(false)
-                .with_target(false),
-        )
-        .with(
-            tracing_subscriber::fmt::layer()
-                .with_ansi(true)
-                .with_target(true),
-        )
-        .init();
-
-    Some(guard)
-}
 
 #[actix_web::main]
 async fn main() -> anyhow::Result<()> {
     let config = AppConfig::load();
-    let _log_guard = init_logging(&config);
+    let _log_guard = logging::init_logging(&config);
 
     if let Some(dir) = config.resolved_data_dir()
         && !Path::new(dir).exists()
@@ -62,8 +26,8 @@ async fn main() -> anyhow::Result<()> {
         std::fs::create_dir_all(parent)?;
     }
 
-    let conn = db::open(db_path).map_err(map_err)?;
-    db::init_schema(&conn).map_err(map_err)?;
+    let conn = db::open(db_path).map_err(logging::map_err)?;
+    db::init_schema(&conn).map_err(logging::map_err)?;
 
     let kube_client = k8s::try_client().await;
     let (event_bus, _rx) = broadcast::channel(256);
@@ -73,16 +37,16 @@ async fn main() -> anyhow::Result<()> {
             ep.clone()
         } else if let Some(ref client) = kube_client {
             let ns = config.resolved_k8s_namespace();
-            k8s::ensure_namespace(client, ns).await.map_err(map_err)?;
+            k8s::ensure_namespace(client, ns).await.map_err(logging::map_err)?;
             let s3_cfg = awsem_s3::RustFsConfig::new(
                 ns,
                 config.rustfs_image.as_deref().unwrap_or("rustfs/rustfs:latest"),
                 config.resolved_rustfs_pvc_size(),
             );
-            awsem_s3::deploy::deploy(client, &s3_cfg).await.map_err(map_err)?;
-            awsem_s3::deploy::wait_ready(client, ns).await.map_err(map_err)?;
-            let pod_name = awsem_s3::deploy::get_pod_name(client, ns).await.map_err(map_err)?;
-            let port = awsem_s3::port_forward::port_forward(client, ns, &pod_name).await.map_err(map_err)?;
+            awsem_s3::deploy::deploy(client, &s3_cfg).await.map_err(logging::map_err)?;
+            awsem_s3::deploy::wait_ready(client, ns).await.map_err(logging::map_err)?;
+            let pod_name = awsem_s3::deploy::get_pod_name(client, ns).await.map_err(logging::map_err)?;
+            let port = awsem_s3::port_forward::port_forward(client, ns, &pod_name).await.map_err(logging::map_err)?;
             format!("http://127.0.0.1:{port}")
         } else {
             tracing::warn!("No K8s client, S3 disabled");
@@ -104,7 +68,7 @@ async fn main() -> anyhow::Result<()> {
     };
     let cognito_state = awsem_cognito::AppState {
         db: conn.clone(),
-        jwt_secret: "awsem-dev-secret".into(),
+        jwt_secret: config.resolved_jwt_secret().to_string(),
     };
     let secrets_state = awsem_secretsmanager::AppState { db: conn.clone() };
     let emr_state = awsem_emr::AppState {
@@ -112,6 +76,7 @@ async fn main() -> anyhow::Result<()> {
         event_bus: event_bus.clone(),
         k8s_client: kube_client.clone(),
         namespace: ns.clone(),
+        emr_spark_image: config.emr_spark_image.clone(),
     };
     let lambda_state = awsem_lambda::AppState {
         db: conn.clone(),
@@ -154,14 +119,29 @@ async fn main() -> anyhow::Result<()> {
     .bind(("0.0.0.0", port))?
     .run();
 
+    let srv_handle = server.handle();
+    tokio::spawn(async move {
+        let mut term = signal::unix::signal(signal::unix::SignalKind::terminate())
+            .expect("register SIGTERM handler");
+        tokio::select! {
+            _ = term.recv() => tracing::info!("Received SIGTERM, shutting down"),
+            _ = signal::ctrl_c() => tracing::info!("Received SIGINT, shutting down"),
+        }
+        srv_handle.stop(true).await;
+    });
+
     tracing::info!(port, "awsem started");
-    let _ = server.await;
+    if let Err(e) = server.await {
+        tracing::error!("Server exited with error: {e}");
+    }
 
     if let Some(ref client) = kube_client {
         let s3_cfg = awsem_s3::RustFsConfig::new(
             &ns, "", config.resolved_rustfs_pvc_size(),
         );
-        let _ = awsem_s3::deploy::cleanup(client, &s3_cfg).await;
+        if let Err(e) = awsem_s3::deploy::cleanup(client, &s3_cfg).await {
+            tracing::warn!("Failed to clean up RustFS resources: {e}");
+        }
     }
 
     Ok(())

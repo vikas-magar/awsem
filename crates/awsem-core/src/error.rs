@@ -23,7 +23,7 @@ pub enum AwsemError {
 }
 
 impl AwsemError {
-    pub fn status_code(&self) -> StatusCode {
+    fn status_code(&self) -> StatusCode {
         match self {
             Self::NotImplemented(_) => StatusCode::NOT_IMPLEMENTED,
             Self::NotFound(_) => StatusCode::NOT_FOUND,
@@ -34,40 +34,32 @@ impl AwsemError {
         }
     }
 
+    fn aws_json(&self, type_name: &str) -> serde_json::Value {
+        json!({"__type": type_name, "Message": self.to_string()})
+    }
+
     pub fn to_response(&self) -> HttpResponse {
-        let code = self.status_code();
-        HttpResponse::build(code).json(json!({
-            "message": self.to_string(),
-            "__type": "AwsemError",
-        }))
+        HttpResponse::build(self.status_code()).json(self.aws_json("AwsemError"))
     }
 
     pub fn cognito_response(&self) -> HttpResponse {
-        let code = self.status_code();
-        let type_name = match self {
+        let t = match self {
             Self::NotFound(_) => "ResourceNotFoundException",
             Self::InvalidRequest(_) => "InvalidParameterException",
             Self::AlreadyExists(_) => "UsernameExistsException",
             Self::Conflict(_) => "ConcurrentModificationException",
             _ => "InternalErrorException",
         };
-        HttpResponse::build(code).json(json!({
-            "__type": type_name,
-            "message": self.to_string(),
-        }))
+        HttpResponse::build(self.status_code()).json(self.aws_json(t))
     }
 
     pub fn secrets_response(&self) -> HttpResponse {
-        let code = self.status_code();
-        let type_name = match self {
+        let t = match self {
             Self::NotFound(_) => "ResourceNotFoundException",
             Self::InvalidRequest(_) => "InvalidParameterException",
             Self::AlreadyExists(_) => "ResourceExistsException",
             _ => "InternalServiceError",
         };
-        HttpResponse::build(code).json(json!({
-            "__type": type_name,
-            "message": self.to_string(),
-        }))
+        HttpResponse::build(self.status_code()).json(self.aws_json(t))
     }
 }

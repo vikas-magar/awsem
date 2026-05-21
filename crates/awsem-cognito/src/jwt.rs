@@ -6,6 +6,9 @@ pub struct Claims {
     pub sub: String,
     pub username: String,
     pub pool_id: String,
+    pub token_use: String,
+    pub iss: String,
+    pub auth_time: usize,
     pub exp: usize,
     pub iat: usize,
 }
@@ -20,31 +23,16 @@ pub fn create_tokens(
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_secs() as usize;
-    let access_claims = Claims {
-        sub: sub.into(),
-        username: username.into(),
-        pool_id: pool_id.into(),
-        exp: now + 3600,
-        iat: now,
-    };
-    let id_claims = Claims {
-        sub: sub.into(),
-        username: username.into(),
-        pool_id: pool_id.into(),
-        exp: now + 86400,
-        iat: now,
-    };
-    let refresh_claims = Claims {
-        sub: sub.into(),
-        username: username.into(),
-        pool_id: pool_id.into(),
-        exp: now + 2592000,
-        iat: now,
+    let iss = format!("https://cognito-idp.us-east-1.amazonaws.com/{pool_id}");
+    let base = |token_use: &str, exp_offset: usize| Claims {
+        sub: sub.into(), username: username.into(), pool_id: pool_id.into(),
+        token_use: token_use.into(), iss: iss.clone(), auth_time: now,
+        exp: now + exp_offset, iat: now,
     };
     let key = EncodingKey::from_secret(secret.as_bytes());
-    let access = encode(&Header::default(), &access_claims, &key).map_err(|e| e.to_string())?;
-    let id = encode(&Header::default(), &id_claims, &key).map_err(|e| e.to_string())?;
-    let refresh = encode(&Header::default(), &refresh_claims, &key).map_err(|e| e.to_string())?;
+    let access = encode(&Header::default(), &base("access", 3600), &key).map_err(|e| e.to_string())?;
+    let id = encode(&Header::default(), &base("id", 86400), &key).map_err(|e| e.to_string())?;
+    let refresh = encode(&Header::default(), &base("refresh", 2592000), &key).map_err(|e| e.to_string())?;
     Ok((access, id, refresh))
 }
 

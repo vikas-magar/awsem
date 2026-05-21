@@ -12,7 +12,7 @@ pub async fn create(state: web::Data<AppState>, body: bytes::Bytes) -> HttpRespo
     let namespace = input
         .pointer("/containerProvider/info/eksInfo/namespace")
         .and_then(|v| v.as_str())
-        .unwrap_or("default");
+        .unwrap_or(&state.namespace);
     let id = uuid::Uuid::new_v4().to_string();
     let arn = format!("arn:aws:emr-containers:us-east-1:000000000000:/virtualclusters/{id}");
     let c = match state.db.lock() {

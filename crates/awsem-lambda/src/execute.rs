@@ -36,17 +36,19 @@ pub async fn run(
         }
     };
 
-    let image = match image {
-        Some(img) => img,
-        None => match &state.lambda_runtime_image {
-            Some(img) => img.clone(),
-            None => return json!({"statusCode": 500, "body": String::from("No Lambda runtime image configured")}).to_string(),
-        },
+    let image = match image.or_else(|| state.lambda_runtime_image.clone()) {
+        Some(i) => i,
+        None => return json!({"statusCode": 500, "body": String::from("No Lambda runtime image configured")}).to_string(),
     };
 
     let job_id = Uuid::new_v4().to_string();
     let job_name = format!("lambda-{name}-{job_id}");
+    let secret_name = format!("lambda-payload-{job_id}");
     let namespace = &state.namespace;
+
+    if let Err(e) = crate::extract::create_secret(&client, namespace, &secret_name, "input", payload).await {
+        return json!({"statusCode": 500, "body": format!("Failed to create payload Secret: {e}")}).to_string();
+    }
 
     let job_obj: Job = serde_json::from_value(json!({
         "apiVersion": "batch/v1",
@@ -58,13 +60,19 @@ pub async fn run(
             "template": {
                 "spec": {
                     "restartPolicy": "Never",
+                    "volumes": [{
+                        "name": "payload",
+                        "secret": { "secretName": secret_name, "items": [{"key": "input", "path": "input"}] }
+                    }],
                     "containers": [{
                         "name": "lambda-runner",
                         "image": image,
                         "imagePullPolicy": "IfNotPresent",
+                        "resources": {"requests": {"cpu": "250m", "memory": "256Mi"}, "limits": {"cpu": "500m", "memory": "512Mi"}},
+                        "volumeMounts": [{"name": "payload", "mountPath": "/var/payload", "readOnly": true}],
                         "env": [
                             {"name": "_HANDLER", "value": handler},
-                            {"name": "_PAYLOAD", "value": payload},
+                            {"name": "_PAYLOAD_FILE", "value": "/var/payload/input"},
                         ]
                     }]
                 }
@@ -75,6 +83,7 @@ pub async fn run(
 
     let job_api: kube::Api<Job> = kube::Api::namespaced(client.clone(), namespace);
     if let Err(e) = job_api.create(&PostParams::default(), &job_obj).await {
+        crate::extract::delete_secret(&client, namespace, &secret_name).await;
         return json!({"statusCode": 500, "body": format!("Failed to create K8s Job: {e}")}).to_string();
     }
     tracing::info!(job_name, "Created K8s Job for Lambda");
@@ -107,8 +116,10 @@ pub async fn run(
                 if phase == "Succeeded" || phase == "Failed" {
                     let pod_name = pod.metadata.name.as_deref().unwrap_or("");
                     let log_result = pod_api.logs(pod_name, &Default::default()).await;
-                    let _ = job_api.delete(&job_name, &Default::default()).await;
-
+                    if let Err(e) = job_api.delete(&job_name, &Default::default()).await {
+                        tracing::warn!("Failed to delete K8s Job {job_name}: {e}");
+                    }
+                    crate::extract::delete_secret(&client, namespace, &secret_name).await;
                     return match log_result {
                         Ok(logs) => {
                             if phase == "Succeeded" {
@@ -122,7 +133,10 @@ pub async fn run(
                 }
             }
             _ = tokio::time::sleep_until(deadline) => {
-                let _ = job_api.delete(&job_name, &Default::default()).await;
+                if let Err(e) = job_api.delete(&job_name, &Default::default()).await {
+                    tracing::warn!("Failed to delete timed-out K8s Job {job_name}: {e}");
+                }
+                crate::extract::delete_secret(&client, namespace, &secret_name).await;
                 return json!({"statusCode": 500, "body": String::from("Lambda timed out")}).to_string();
             }
         }

@@ -13,23 +13,18 @@ pub async fn create(
         Err(e) => return awsem_core::error::AwsemError::InvalidRequest(e.to_string()).to_response(),
     };
     let name = input.get("FunctionName").and_then(|v| v.as_str()).unwrap_or("");
-    if name.is_empty() {
-        return awsem_core::error::AwsemError::InvalidRequest("FunctionName is required".into()).to_response();
+    if let Err(msg) = crate::name::validate(name) {
+        return awsem_core::error::AwsemError::InvalidRequest(format!("Invalid FunctionName: {msg}")).to_response();
     }
     let runtime = input.get("Runtime").and_then(|v| v.as_str()).unwrap_or("provided.al2023");
     let handler = input.get("Handler").and_then(|v| v.as_str()).unwrap_or("");
     let role = input.get("Role").and_then(|v| v.as_str()).unwrap_or("");
-    let image = input
-        .get("Image")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
+    let image = input.get("Image").and_then(|v| v.as_str()).map(|s| s.to_string())
         .or_else(|| state.lambda_runtime_image.clone());
     let arn = format!("arn:aws:lambda:us-east-1:000000000000:function:{name}");
     let timeout = input.get("Timeout").and_then(|v| v.as_i64()).unwrap_or(3) as i32;
     let memory = input.get("MemorySize").and_then(|v| v.as_i64()).unwrap_or(128) as i32;
-    let code_zip = input
-        .pointer("/Code/ZipFile")
-        .and_then(|v| v.as_str())
+    let code_zip = input.pointer("/Code/ZipFile").and_then(|v| v.as_str())
         .and_then(|b| BASE64.decode(b).ok());
 
     let now = chrono::Utc::now().to_rfc3339();
@@ -43,19 +38,9 @@ pub async fn create(
     ) {
         return awsem_core::error::AwsemError::AlreadyExists(e.to_string()).to_response();
     }
-
     if let Some(zip) = code_zip {
-        let dir = data_dir_fn(&state.data_dir, name);
-        let _ = std::fs::create_dir_all(&dir);
-        let zip_path = format!("{dir}/code.zip");
-        let _ = std::fs::write(&zip_path, &zip);
-        let _ = std::process::Command::new("unzip")
-            .arg("-o")
-            .arg("-d").arg(&dir)
-            .arg(&zip_path)
-            .output();
+        crate::extract::save_code_zip(&state.data_dir, name, &zip);
     }
-
     HttpResponse::Created().json(json!({
         "FunctionName": name, "FunctionArn": arn,
         "Runtime": runtime, "Handler": handler, "Role": role,
@@ -70,6 +55,9 @@ pub async fn get(
     path: web::Path<String>,
 ) -> HttpResponse {
     let name = path.into_inner();
+    if let Err(msg) = crate::name::validate(&name) {
+        return awsem_core::error::AwsemError::InvalidRequest(format!("Invalid FunctionName: {msg}")).to_response();
+    }
     let c = match state.db.lock() {
         Ok(c) => c,
         Err(e) => return awsem_core::error::AwsemError::Internal(e.to_string()).to_response(),
@@ -94,9 +82,7 @@ pub async fn get(
     HttpResponse::Ok().json(json!({"Configuration": func}))
 }
 
-pub async fn list(
-    state: web::Data<AppState>,
-) -> HttpResponse {
+pub async fn list(state: web::Data<AppState>) -> HttpResponse {
     let c = match state.db.lock() {
         Ok(c) => c,
         Err(e) => return awsem_core::error::AwsemError::Internal(e.to_string()).to_response(),
@@ -134,6 +120,9 @@ pub async fn delete_fn(
     path: web::Path<String>,
 ) -> HttpResponse {
     let name = path.into_inner();
+    if let Err(msg) = crate::name::validate(&name) {
+        return awsem_core::error::AwsemError::InvalidRequest(format!("Invalid FunctionName: {msg}")).to_response();
+    }
     let c = match state.db.lock() {
         Ok(c) => c,
         Err(e) => return awsem_core::error::AwsemError::Internal(e.to_string()).to_response(),
@@ -142,12 +131,10 @@ pub async fn delete_fn(
         return awsem_core::error::AwsemError::NotFound(name).to_response();
     }
     if let Some(dir) = state.data_dir.as_ref() {
-        let _ = std::fs::remove_dir_all(format!("{dir}/lambdas/{name}"));
+        let path = format!("{dir}/lambdas/{name}");
+        if let Err(e) = std::fs::remove_dir_all(&path) {
+            tracing::warn!("Failed to remove {path}: {e}");
+        }
     }
     HttpResponse::Ok().json(json!({}))
-}
-
-pub fn data_dir_fn(data_dir: &Option<String>, name: &str) -> String {
-    let base = data_dir.clone().unwrap_or_else(|| "./lambdas".into());
-    format!("{base}/{name}")
 }

@@ -10,10 +10,10 @@ pub fn build_args(
 
     if let Some(driver) = job_driver.get("sparkSubmitJobDriver")
         && let Some(params_str) = driver.get("sparkSubmitParameters").and_then(|v| v.as_str()) {
-            let parts: Vec<&str> = params_str.split_whitespace().collect();
+            let parts = shlex::split(params_str).unwrap_or_default();
             let mut i = 0;
             while i < parts.len() {
-                let p = parts[i];
+                let p = &parts[i];
                 if p == "--master" || p == "--deploy-mode" {
                     i += 2;
                     continue;
@@ -22,7 +22,7 @@ pub fn build_args(
                     i += 1;
                     continue;
                 }
-                args.push(p.to_string());
+                args.push(p.clone());
                 i += 1;
             }
         }
@@ -43,6 +43,15 @@ pub fn build_args(
     args.push(format!("spark.kubernetes.driver.label.awsem-job-run-id={job_id}"));
     args.push("--conf".into());
     args.push(format!("spark.kubernetes.executor.label.awsem-job-run-id={job_id}"));
+
+    args.push("--conf".into());
+    args.push("spark.hadoop.fs.s3a.endpoint=http://rustfs-svc:9000".into());
+    args.push("--conf".into());
+    args.push("spark.hadoop.fs.s3a.access.key=awsem".into());
+    args.push("--conf".into());
+    args.push("spark.hadoop.fs.s3a.secret.key=awsem".into());
+    args.push("--conf".into());
+    args.push("spark.hadoop.fs.s3a.path.style.access=true".into());
 
     if let Some(driver) = job_driver.get("sparkSubmitJobDriver") {
         if let Some(entry) = driver.get("entryPoint").and_then(|v| v.as_str()) {

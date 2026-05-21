@@ -15,15 +15,17 @@ pub async fn on_success(state: &S3State, bucket: &str, key: &str) {
             "Dispatching _SUCCESS event to {target_type}: {arn}"
         );
 
-        if state.event_bus.receiver_count() > 0 {
-            let _ = state.event_bus.send(
+        if state.event_bus.receiver_count() > 0
+            && state.event_bus.send(
                 awsem_events::BusEvent::S3Notification {
                     bucket: bucket.to_string(),
                     key: key.to_string(),
                     target_arn: arn,
                     target_type,
                 },
-            );
+            ).is_err()
+        {
+            tracing::warn!("No subscribers for S3Notification event");
         }
     }
 }

@@ -22,5 +22,6 @@ bytes = "1"
 awsem-events = { path = "../awsem-events" }
 kube = { version = "0.98", features = ["client", "ws"] }
 k8s-openapi = { version = "0.24", features = ["v1_32"] }
+shlex = "1"
 futures = "0.3"
 tokio = { version = "1", features = ["full"] }

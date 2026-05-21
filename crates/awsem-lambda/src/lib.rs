@@ -1,7 +1,9 @@
 pub mod event_source;
 pub mod execute;
+pub mod extract;
 pub mod functions;
 pub mod invoke;
+pub mod name;
 pub mod trigger;
 
 use actix_web::web;

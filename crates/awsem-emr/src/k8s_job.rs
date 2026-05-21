@@ -4,9 +4,7 @@ use actix_web::{web, HttpResponse};
 use rusqlite::params;
 use serde_json::{json, Value};
 use kube::api::PostParams;
-use k8s_openapi::api::batch::v1::Job;
-use k8s_openapi::api::core::v1::ServiceAccount;
-use k8s_openapi::api::rbac::v1::{Role, RoleBinding};
+use k8s_openapi::api::{batch::v1::Job, core::v1::ServiceAccount, rbac::v1::{Role, RoleBinding}};
 
 fn get_vc_info(state: &AppState, vc_id: &str) -> Option<(String, String)> {
     let c = state.db.lock().ok()?;
@@ -47,16 +45,25 @@ pub async fn start_job_run(
             return awsem_core::error::AwsemError::AlreadyExists(e.to_string()).to_response();
         }
     }
+    let mut job_state = "RUNNING";
     if let (Some(client), Some((vc_ns, _))) = (&state.k8s_client, get_vc_info(&state, &vc_id)) {
         ensure_rbac(client, &vc_ns).await;
-        let _ = submit_k8s_job(client, &vc_ns, &id, &job_name, release, &job_driver).await;
+        if let Err(e) = submit_k8s_job(client, &vc_ns, &id, &job_name, release, state.emr_spark_image.as_deref(), &job_driver).await {
+            tracing::error!("Failed to submit K8s job: {e}");
+            job_state = "FAILED";
+        }
     }
-    let _ = state.db.lock().map(|c| c.execute(
-        "UPDATE emr_job_runs SET state = 'RUNNING' WHERE id = ?1",
-        params![id],
-    ));
+    let s = job_state;
+    if let Ok(c) = state.db.lock()
+        && let Err(e) = c.execute(
+            "UPDATE emr_job_runs SET state = ?1 WHERE id = ?2",
+            params![s, id],
+        )
+    {
+        tracing::error!("Failed to update job state: {e}");
+    }
     HttpResponse::Ok().json(json!({
-        "id": id, "arn": arn, "name": name, "state": "RUNNING",
+        "id": id, "arn": arn, "name": name, "state": s,
         "virtualClusterId": vc_id,
     }))
 }
@@ -68,7 +75,9 @@ async fn ensure_rbac(client: &kube::Client, namespace: &str) {
         "kind": "ServiceAccount",
         "metadata": { "name": "spark", "namespace": namespace }
     })).unwrap();
-    let _ = sa_api.create(&PostParams::default(), &sa).await;
+    if let Err(e) = sa_api.create(&PostParams::default(), &sa).await {
+        tracing::warn!("Failed to create Spark ServiceAccount: {e}");
+    }
 
     let role_api: kube::Api<Role> = kube::Api::namespaced(client.clone(), namespace);
     let role: Role = serde_json::from_value(json!({
@@ -81,7 +90,9 @@ async fn ensure_rbac(client: &kube::Client, namespace: &str) {
             "verbs": ["*"]
         }]
     })).unwrap();
-    let _ = role_api.create(&PostParams::default(), &role).await;
+    if let Err(e) = role_api.create(&PostParams::default(), &role).await {
+        tracing::warn!("Failed to create Spark Role: {e}");
+    }
 
     let rb_api: kube::Api<RoleBinding> = kube::Api::namespaced(client.clone(), namespace);
     let rb: RoleBinding = serde_json::from_value(json!({
@@ -91,7 +102,9 @@ async fn ensure_rbac(client: &kube::Client, namespace: &str) {
         "subjects": [{ "kind": "ServiceAccount", "name": "spark", "namespace": namespace }],
         "roleRef": { "kind": "Role", "name": "spark-role", "apiGroup": "rbac.authorization.k8s.io" }
     })).unwrap();
-    let _ = rb_api.create(&PostParams::default(), &rb).await;
+    if let Err(e) = rb_api.create(&PostParams::default(), &rb).await {
+        tracing::warn!("Failed to create Spark RoleBinding: {e}");
+    }
 }
 
 async fn submit_k8s_job(
@@ -100,10 +113,11 @@ async fn submit_k8s_job(
     job_id: &str,
     job_name: &str,
     release: &str,
+    emr_spark_image: Option<&str>,
     job_driver: &serde_json::Map<String, Value>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let image = if release.starts_with("emr-") {
-        "apache/spark:latest".into()
+        emr_spark_image.unwrap_or("apache/spark:latest").to_string()
     } else {
         format!("public.ecr.aws/emr-on-eks/spark/{release}")
     };
@@ -120,6 +134,8 @@ async fn submit_k8s_job(
                     "containers": [{
                         "name": "spark-driver",
                         "image": image,
+                        "imagePullPolicy": "IfNotPresent",
+                        "resources": {"requests": {"cpu": "500m", "memory": "512Mi"}, "limits": {"cpu": "1", "memory": "1Gi"}},
                         "command": ["/opt/spark/bin/spark-submit"],
                         "args": spark_args,
                     }]

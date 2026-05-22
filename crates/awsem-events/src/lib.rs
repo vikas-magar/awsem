@@ -14,8 +14,6 @@ pub enum BusEvent {
     },
 }
 
-pub fn new_bus(
-    capacity: usize,
-) -> (broadcast::Sender<BusEvent>, broadcast::Receiver<BusEvent>) {
+pub fn new_bus(capacity: usize) -> (broadcast::Sender<BusEvent>, broadcast::Receiver<BusEvent>) {
     broadcast::channel(capacity)
 }

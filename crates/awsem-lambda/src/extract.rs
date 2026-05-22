@@ -17,14 +17,23 @@ pub fn save_code_zip(data_dir: &Option<String>, name: &str, zip_data: &[u8]) {
 use k8s_openapi::api::core::v1::Secret;
 use kube::api::{DeleteParams, PostParams};
 
-pub async fn create_secret(client: &kube::Client, ns: &str, name: &str, key: &str, data: &str) -> Result<(), String> {
+pub async fn create_secret(
+    client: &kube::Client,
+    ns: &str,
+    name: &str,
+    key: &str,
+    data: &str,
+) -> Result<(), String> {
     let api: kube::Api<Secret> = kube::Api::namespaced(client.clone(), ns);
     let secret: Secret = serde_json::from_value(serde_json::json!({
         "apiVersion": "v1", "kind": "Secret",
         "metadata": { "name": name, "namespace": ns },
         "stringData": { key: data },
-    })).map_err(|e| e.to_string())?;
-    api.create(&PostParams::default(), &secret).await.map_err(|e| e.to_string())?;
+    }))
+    .map_err(|e| e.to_string())?;
+    api.create(&PostParams::default(), &secret)
+        .await
+        .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -38,12 +47,18 @@ pub async fn delete_secret(client: &kube::Client, ns: &str, name: &str) {
 fn extract_zip(file: std::fs::File, dest: &str) {
     let mut archive = match zip::ZipArchive::new(file) {
         Ok(a) => a,
-        Err(e) => { tracing::error!("Failed to open zip: {e}"); return; }
+        Err(e) => {
+            tracing::error!("Failed to open zip: {e}");
+            return;
+        }
     };
     for i in 0..archive.len() {
         let mut entry = match archive.by_index(i) {
             Ok(e) => e,
-            Err(e) => { tracing::error!("Zip entry {i}: {e}"); continue; }
+            Err(e) => {
+                tracing::error!("Zip entry {i}: {e}");
+                continue;
+            }
         };
         let out_path = match entry.enclosed_name() {
             Some(p) => p.to_owned(),
@@ -56,9 +71,10 @@ fn extract_zip(file: std::fs::File, dest: &str) {
             }
         } else {
             if let Some(parent) = full_path.parent()
-                && let Err(e) = std::fs::create_dir_all(parent) {
-                    tracing::warn!("Failed to create parent {:?}: {e}", parent);
-                }
+                && let Err(e) = std::fs::create_dir_all(parent)
+            {
+                tracing::warn!("Failed to create parent {:?}: {e}", parent);
+            }
             if let Err(e) = std::fs::File::create(&full_path)
                 .and_then(|mut f| std::io::copy(&mut entry, &mut f).map(|_| ()))
             {

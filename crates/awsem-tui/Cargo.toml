@@ -1,0 +1,23 @@
+[package]
+name = "awsem-tui"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "awsem-tui"
+path = "src/main.rs"
+
+[dependencies]
+ratatui = { version = "0.29", features = ["all-widgets"] }
+crossterm = "0.28"
+tokio = { version = "1", features = ["full"] }
+chrono = "0.4"
+clap = { version = "4", features = ["derive"] }
+anyhow = "1"
+aws-config = "1"
+aws-credential-types = "1"
+aws-sdk-s3 = "1"
+aws-sdk-cognitoidentityprovider = "1"
+aws-sdk-secretsmanager = "1"
+aws-sdk-lambda = "1"
+aws-sdk-emrcontainers = "1"

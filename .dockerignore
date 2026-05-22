@@ -1,0 +1,11 @@
+target/
+.git/
+*.md
+*.pdf
+*.png
+*.svg
+*.drawio
+*.pyc
+__pycache__/
+.env
+docker-compose*.yml

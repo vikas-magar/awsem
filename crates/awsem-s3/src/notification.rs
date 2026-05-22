@@ -18,9 +18,8 @@ pub fn get_notification_config(
     bucket: &str,
 ) -> Result<Option<String>, Box<dyn std::error::Error>> {
     let lock = conn.lock().unwrap();
-    let mut stmt = lock.prepare(
-        "SELECT config_xml FROM s3_notification_configs WHERE bucket_name = ?1",
-    )?;
+    let mut stmt =
+        lock.prepare("SELECT config_xml FROM s3_notification_configs WHERE bucket_name = ?1")?;
     let mut rows = stmt.query([bucket])?;
     match rows.next()? {
         Some(row) => Ok(Some(row.get(0)?)),
@@ -28,11 +27,7 @@ pub fn get_notification_config(
     }
 }
 
-pub fn get_event_targets(
-    conn: &DbConn,
-    bucket: &str,
-    _object_key: &str,
-) -> Vec<(String, String)> {
+pub fn get_event_targets(conn: &DbConn, bucket: &str, _object_key: &str) -> Vec<(String, String)> {
     let config = match get_notification_config(conn, bucket) {
         Ok(Some(c)) => c,
         _ => return vec![],
@@ -43,17 +38,20 @@ pub fn get_event_targets(
     for line in config.lines() {
         let trimmed = line.trim();
         if let Some(arn) = trimmed.strip_prefix("<QueueArn>")
-            && let Some(end) = arn.find("</QueueArn>") {
-                targets.push((arn[..end].to_string(), "SQS".into()));
-            }
+            && let Some(end) = arn.find("</QueueArn>")
+        {
+            targets.push((arn[..end].to_string(), "SQS".into()));
+        }
         if let Some(arn) = trimmed.strip_prefix("<TopicArn>")
-            && let Some(end) = arn.find("</TopicArn>") {
-                targets.push((arn[..end].to_string(), "SNS".into()));
-            }
+            && let Some(end) = arn.find("</TopicArn>")
+        {
+            targets.push((arn[..end].to_string(), "SNS".into()));
+        }
         if let Some(arn) = trimmed.strip_prefix("<CloudFunctionArn>")
-            && let Some(end) = arn.find("</CloudFunctionArn>") {
-                targets.push((arn[..end].to_string(), "Lambda".into()));
-            }
+            && let Some(end) = arn.find("</CloudFunctionArn>")
+        {
+            targets.push((arn[..end].to_string(), "Lambda".into()));
+        }
     }
     targets
 }

@@ -14,6 +14,8 @@ tracing-appender = "0.2"
 reqwest = { version = "0.12", features = ["stream"] }
 serde_json = "1"
 anyhow = "1"
+chrono = "0.4"
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
 awsem-core = { path = "../awsem-core" }
 awsem-s3 = { path = "../awsem-s3" }
 awsem-cognito = { path = "../awsem-cognito" }
@@ -21,3 +23,4 @@ awsem-secretsmanager = { path = "../awsem-secretsmanager" }
 awsem-emr = { path = "../awsem-emr" }
 awsem-lambda = { path = "../awsem-lambda" }
 awsem-events = { path = "../awsem-events" }
+awsem-care = { path = "../awsem-care" }

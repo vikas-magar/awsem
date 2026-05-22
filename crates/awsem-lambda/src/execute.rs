@@ -2,17 +2,13 @@ use crate::AppState;
 use futures::StreamExt;
 use k8s_openapi::api::batch::v1::Job;
 use kube::api::PostParams;
-use kube::runtime::watcher;
 use kube::runtime::WatchStreamExt;
+use kube::runtime::watcher;
 use serde_json::json;
 use uuid::Uuid;
 
 #[tracing::instrument(skip(state), fields(name = %name))]
-pub async fn run(
-    name: &str,
-    payload: &str,
-    state: &AppState,
-) -> String {
+pub async fn run(name: &str, payload: &str, state: &AppState) -> String {
     let client = match &state.kube_client {
         Some(c) => c.clone(),
         None => {
@@ -24,15 +20,26 @@ pub async fn run(
     let (handler, image, timeout) = {
         let c = match state.db.lock() {
             Ok(c) => c,
-            Err(e) => return json!({"statusCode": 500, "body": format!("DB error: {e}")}).to_string(),
+            Err(e) => {
+                return json!({"statusCode": 500, "body": format!("DB error: {e}")}).to_string();
+            }
         };
         match c.query_row(
             "SELECT handler, image, timeout FROM lambda_functions WHERE name = ?1",
             rusqlite::params![name],
-            |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?, row.get::<_, i32>(2)?)),
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, i32>(2)?,
+                ))
+            },
         ) {
             Ok(f) => f,
-            Err(_) => return json!({"statusCode": 404, "body": format!("Function {name} not found")}).to_string(),
+            Err(_) => {
+                return json!({"statusCode": 404, "body": format!("Function {name} not found")})
+                    .to_string();
+            }
         }
     };
 
@@ -46,8 +53,11 @@ pub async fn run(
     let secret_name = format!("lambda-payload-{job_id}");
     let namespace = &state.namespace;
 
-    if let Err(e) = crate::extract::create_secret(&client, namespace, &secret_name, "input", payload).await {
-        return json!({"statusCode": 500, "body": format!("Failed to create payload Secret: {e}")}).to_string();
+    if let Err(e) =
+        crate::extract::create_secret(&client, namespace, &secret_name, "input", payload).await
+    {
+        return json!({"statusCode": 500, "body": format!("Failed to create payload Secret: {e}")})
+            .to_string();
     }
 
     let job_obj: Job = serde_json::from_value(json!({
@@ -84,58 +94,40 @@ pub async fn run(
     let job_api: kube::Api<Job> = kube::Api::namespaced(client.clone(), namespace);
     if let Err(e) = job_api.create(&PostParams::default(), &job_obj).await {
         crate::extract::delete_secret(&client, namespace, &secret_name).await;
-        return json!({"statusCode": 500, "body": format!("Failed to create K8s Job: {e}")}).to_string();
+        return json!({"statusCode": 500, "body": format!("Failed to create K8s Job: {e}")})
+            .to_string();
     }
     tracing::info!(job_name, "Created K8s Job for Lambda");
 
     let pod_api: kube::Api<k8s_openapi::api::core::v1::Pod> =
         kube::Api::namespaced(client.clone(), namespace);
 
-    let timeout_secs = timeout.max(3) as u64 + 10;
-    let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_secs(timeout_secs);
-
-    let watch_config = watcher::Config::default().labels(&format!("job-name={job_name}"));
-    let mut stream = watcher(pod_api.clone(), watch_config)
-        .applied_objects()
-        .boxed();
+    let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_secs(timeout.max(3) as u64 + 10);
+    let mut stream = watcher(pod_api.clone(), watcher::Config::default().labels(&format!("job-name={job_name}")))
+        .applied_objects().boxed();
 
     loop {
         tokio::select! {
             Some(item) = stream.next() => {
                 let pod = match item {
                     Ok(p) => p,
-                    Err(e) => {
-                        tracing::warn!("Watch error: {e}");
-                        continue;
-                    }
+                    Err(e) => { tracing::warn!("Watch error: {e}"); continue; }
                 };
-                let phase = pod.status.as_ref()
-                    .and_then(|s| s.phase.as_deref())
-                    .unwrap_or("");
-
+                let phase = pod.status.as_ref().and_then(|s| s.phase.as_deref()).unwrap_or("");
                 if phase == "Succeeded" || phase == "Failed" {
                     let pod_name = pod.metadata.name.as_deref().unwrap_or("");
                     let log_result = pod_api.logs(pod_name, &Default::default()).await;
-                    if let Err(e) = job_api.delete(&job_name, &Default::default()).await {
-                        tracing::warn!("Failed to delete K8s Job {job_name}: {e}");
-                    }
+                    job_api.delete(&job_name, &Default::default()).await.ok();
                     crate::extract::delete_secret(&client, namespace, &secret_name).await;
                     return match log_result {
-                        Ok(logs) => {
-                            if phase == "Succeeded" {
-                                logs.trim().to_string()
-                            } else {
-                                json!({"statusCode": 500, "body": logs}).to_string()
-                            }
-                        }
+                        Ok(logs) => if phase == "Succeeded" { logs.trim().to_string() }
+                            else { json!({"statusCode": 500, "body": logs}).to_string() },
                         Err(e) => json!({"statusCode": 500, "body": format!("Log read error: {e}")}).to_string(),
                     };
                 }
             }
             _ = tokio::time::sleep_until(deadline) => {
-                if let Err(e) = job_api.delete(&job_name, &Default::default()).await {
-                    tracing::warn!("Failed to delete timed-out K8s Job {job_name}: {e}");
-                }
+                job_api.delete(&job_name, &Default::default()).await.ok();
                 crate::extract::delete_secret(&client, namespace, &secret_name).await;
                 return json!({"statusCode": 500, "body": String::from("Lambda timed out")}).to_string();
             }

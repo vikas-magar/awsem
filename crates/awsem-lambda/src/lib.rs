@@ -1,3 +1,4 @@
+pub mod create;
 pub mod event_source;
 pub mod execute;
 pub mod extract;
@@ -23,13 +24,22 @@ pub struct AppState {
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/2015-03-31")
-            .route("/functions", web::post().to(functions::create))
+            .route("/functions", web::post().to(create::create))
             .route("/functions", web::get().to(functions::list))
             .route("/functions/{name}", web::get().to(functions::get))
             .route("/functions/{name}", web::delete().to(functions::delete_fn))
-            .route("/functions/{name}/invocations", web::post().to(invoke::handle))
-            .route("/event-source-mappings", web::post().to(event_source::create))
+            .route(
+                "/functions/{name}/invocations",
+                web::post().to(invoke::handle),
+            )
+            .route(
+                "/event-source-mappings",
+                web::post().to(event_source::create),
+            )
             .route("/event-source-mappings", web::get().to(event_source::list))
-            .route("/event-source-mappings/{uuid}", web::delete().to(event_source::delete)),
+            .route(
+                "/event-source-mappings/{uuid}",
+                web::delete().to(event_source::delete),
+            ),
     );
 }

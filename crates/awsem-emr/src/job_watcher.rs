@@ -43,12 +43,19 @@ async fn check_k8s_status(
     let pods: kube::Api<k8s_openapi::api::core::v1::Pod> =
         kube::Api::namespaced(client.clone(), &job.ns);
     let label = format!("awsem-job-run-id={}", job.id);
-    let list = match pods.list(&kube::api::ListParams::default().labels(&label)).await {
+    let list = match pods
+        .list(&kube::api::ListParams::default().labels(&label))
+        .await
+    {
         Ok(l) => l,
         Err(_) => return,
     };
     for pod in list {
-        let phase = pod.status.as_ref().and_then(|s| s.phase.as_deref()).unwrap_or("");
+        let phase = pod
+            .status
+            .as_ref()
+            .and_then(|s| s.phase.as_deref())
+            .unwrap_or("");
         match phase {
             "Succeeded" => {
                 tracing::info!("Job {} driver pod Succeeded", job.id);
@@ -120,13 +127,15 @@ fn get_running_jobs(db: &DbConn) -> Result<Vec<RunningJob>, String> {
          LEFT JOIN emr_virtual_clusters v ON v.id = j.virtual_cluster_id
          WHERE j.state IN ('RUNNING', 'SUBMITTED')"
     ).map_err(|e| e.to_string())?;
-    let rows = stmt.query_map([], |row| {
-        Ok(RunningJob {
-            id: row.get::<_, String>(0)?,
-            vc_id: row.get::<_, String>(1)?,
-            ns: row.get::<_, String>(3)?,
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(RunningJob {
+                id: row.get::<_, String>(0)?,
+                vc_id: row.get::<_, String>(1)?,
+                ns: row.get::<_, String>(3)?,
+            })
         })
-    }).map_err(|e| e.to_string())?;
+        .map_err(|e| e.to_string())?;
     let mut jobs = Vec::new();
     for row in rows {
         jobs.push(row.map_err(|e| e.to_string())?);

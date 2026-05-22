@@ -1,7 +1,7 @@
-use actix_web::{web, HttpRequest, HttpResponse};
+use actix_web::{HttpRequest, HttpResponse, web};
+use awsem_core::db::DbConn;
 use std::collections::HashMap;
 use tokio::sync::broadcast;
-use awsem_core::db::DbConn;
 
 #[derive(Clone)]
 pub struct S3State {
@@ -77,9 +77,8 @@ pub async fn s3_handler(
     }
 
     let mut actix_resp = HttpResponse::build(
-        actix_web::http::StatusCode::from_u16(status_code.as_u16()).unwrap_or(
-            actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
-        ),
+        actix_web::http::StatusCode::from_u16(status_code.as_u16())
+            .unwrap_or(actix_web::http::StatusCode::INTERNAL_SERVER_ERROR),
     );
     for (name_str, value_str) in &headers {
         if let (Ok(n), Ok(v)) = (

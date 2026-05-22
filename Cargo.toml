@@ -9,4 +9,7 @@ members = [
     "crates/awsem-emr",
     "crates/awsem-lambda",
     "crates/awsem-events",
+    "crates/awsem-care",
+    "crates/awsem-tui",
+    "crates/awsem-spark-agent",
 ]

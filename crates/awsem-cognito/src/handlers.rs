@@ -1,26 +1,41 @@
+use crate::AppState;
 use crate::jwt;
 use crate::store;
-use crate::AppState;
-use actix_web::{web, HttpRequest, HttpResponse};
-use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
+use actix_web::{HttpRequest, HttpResponse, web};
 use argon2::Argon2;
+use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 use rand::rngs::OsRng;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
-fn pool_id() -> &'static str { "us-east-1_default" }
+fn pool_id() -> &'static str {
+    "us-east-1_default"
+}
 
 #[tracing::instrument(skip(req, body, state))]
-pub async fn handle(req: HttpRequest, body: bytes::Bytes, state: web::Data<AppState>) -> HttpResponse {
-    let target = req.headers().get("X-Amz-Target").and_then(|v| v.to_str().ok()).unwrap_or("");
+pub async fn handle(
+    req: HttpRequest,
+    body: bytes::Bytes,
+    state: web::Data<AppState>,
+) -> HttpResponse {
+    let target = req
+        .headers()
+        .get("X-Amz-Target")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
     let input: Value = match serde_json::from_slice(&body) {
         Ok(v) => v,
-        Err(e) => return awsem_core::error::AwsemError::InvalidRequest(e.to_string()).cognito_response(),
+        Err(e) => {
+            return awsem_core::error::AwsemError::InvalidRequest(e.to_string()).cognito_response();
+        }
     };
+    use crate::admin;
     match target {
         "AWSCognitoIdentityProviderService.SignUp" => handle_sign_up(input, &state).await,
         "AWSCognitoIdentityProviderService.ConfirmSignUp" => handle_confirm_sign_up(input, &state).await,
-        "AWSCognitoIdentityProviderService.AdminCreateUser" => crate::admin::admin_create_user(input, &state).await,
-        "AWSCognitoIdentityProviderService.AdminGetUser" => crate::admin::admin_get_user(input, &state).await,
+        "AWSCognitoIdentityProviderService.AdminCreateUser" => admin::admin_create_user(input, &state).await,
+        "AWSCognitoIdentityProviderService.AdminGetUser" => admin::admin_get_user(input, &state).await,
+        "AWSCognitoIdentityProviderService.ListUsers" => admin::admin_list_users(input, &state).await,
+        "AWSCognitoIdentityProviderService.AdminDeleteUser" => admin::admin_delete_user(input, &state).await,
         "AWSCognitoIdentityProviderService.InitiateAuth" => handle_initiate_auth(input, &state).await,
         "AWSCognitoIdentityProviderService.RespondToAuthChallenge" => HttpResponse::Ok().json(json!({"ChallengeName": "NEW_PASSWORD_REQUIRED", "Session": "mock-session"})),
         "AWSCognitoIdentityProviderService.GlobalSignOut" => HttpResponse::Ok().json(json!({})),
@@ -43,10 +58,20 @@ async fn handle_sign_up(input: Value, state: &AppState) -> HttpResponse {
         Err(e) => return awsem_core::error::AwsemError::Internal(e.to_string()).cognito_response(),
     };
     let sub = uuid::Uuid::new_v4().to_string();
-    if let Err(e) = store::create_user(&state.db, &sub, pid, username, &password_hash, None, "{}", "UNCONFIRMED") {
+    if let Err(e) = store::create_user(
+        &state.db,
+        &sub,
+        pid,
+        username,
+        &password_hash,
+        None,
+        "{}",
+        "UNCONFIRMED",
+    ) {
         return awsem_core::error::AwsemError::InvalidRequest(e).cognito_response();
     }
-    HttpResponse::Ok().json(json!({"UserConfirmed": false, "UserSub": sub, "CodeDeliveryDetails": null}))
+    HttpResponse::Ok()
+        .json(json!({"UserConfirmed": false, "UserSub": sub, "CodeDeliveryDetails": null}))
 }
 
 async fn handle_confirm_sign_up(input: Value, state: &AppState) -> HttpResponse {
@@ -63,8 +88,14 @@ async fn handle_initiate_auth(input: Value, state: &AppState) -> HttpResponse {
         .and_then(|v| v.as_object())
         .cloned()
         .unwrap_or_default();
-    let username = auth_params.get("USERNAME").and_then(|v| v.as_str()).unwrap_or("");
-    let password = auth_params.get("PASSWORD").and_then(|v| v.as_str()).unwrap_or("");
+    let username = auth_params
+        .get("USERNAME")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let password = auth_params
+        .get("PASSWORD")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
     let user = match store::get_user_by_username(&state.db, pool_id(), username) {
         Ok(u) => u,
         Err(e) => return awsem_core::error::AwsemError::NotFound(e).cognito_response(),
@@ -82,10 +113,11 @@ async fn handle_initiate_auth(input: Value, state: &AppState) -> HttpResponse {
         )
         .cognito_response();
     }
-    let (access, id, refresh) = match jwt::create_tokens(&user.id, username, pool_id(), &state.jwt_secret) {
-        Ok(t) => t,
-        Err(e) => return awsem_core::error::AwsemError::Internal(e).cognito_response(),
-    };
+    let (access, id, refresh) =
+        match jwt::create_tokens(&user.id, username, pool_id(), &state.jwt_secret) {
+            Ok(t) => t,
+            Err(e) => return awsem_core::error::AwsemError::Internal(e).cognito_response(),
+        };
     HttpResponse::Ok().json(json!({
         "AuthenticationResult": {
             "AccessToken": access,
@@ -98,7 +130,10 @@ async fn handle_initiate_auth(input: Value, state: &AppState) -> HttpResponse {
 }
 
 async fn handle_get_user(input: Value, state: &AppState) -> HttpResponse {
-    let access_token = input.get("AccessToken").and_then(|v| v.as_str()).unwrap_or("");
+    let access_token = input
+        .get("AccessToken")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
     let claims = match jwt::verify_token(access_token, &state.jwt_secret) {
         Ok(c) => c,
         Err(e) => return awsem_core::error::AwsemError::InvalidRequest(e).cognito_response(),

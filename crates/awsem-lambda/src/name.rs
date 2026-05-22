@@ -1,7 +1,14 @@
 pub fn validate(name: &str) -> Result<(), &'static str> {
-    if name.is_empty() { return Err("name must not be empty"); }
-    if name.len() > 64 { return Err("name must be at most 64 characters"); }
-    if !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+    if name.is_empty() {
+        return Err("name must not be empty");
+    }
+    if name.len() > 64 {
+        return Err("name must be at most 64 characters");
+    }
+    if !name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
         return Err("name can only contain letters, numbers, hyphens, and underscores");
     }
     Ok(())

@@ -1,6 +1,6 @@
 use k8s_openapi::api::core::v1::Namespace;
-use kube::api::{Api, PostParams};
 use kube::Client;
+use kube::api::{Api, PostParams};
 use serde_json::json;
 
 pub async fn try_client() -> Option<Client> {

@@ -1,6 +1,8 @@
+pub mod admin;
 pub mod job_runs;
 pub mod job_watcher;
 pub mod k8s_job;
+pub mod spawner;
 pub mod releases;
 pub mod spark_params;
 pub mod virtual_cluster;
@@ -16,6 +18,7 @@ pub struct AppState {
     pub k8s_client: Option<kube::Client>,
     pub namespace: String,
     pub emr_spark_image: Option<String>,
+    pub awsem_endpoint: String,
 }
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -26,8 +29,19 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .route("/{id}", web::delete().to(virtual_cluster::delete))
             .route("/{vc_id}/jobruns", web::post().to(k8s_job::start_job_run))
             .route("/{vc_id}/jobruns", web::get().to(job_runs::list))
-            .route("/{vc_id}/jobruns/{jr_id}", web::get().to(job_runs::describe))
-            .route("/{vc_id}/jobruns/{jr_id}", web::delete().to(job_runs::cancel)),
+            .route(
+                "/{vc_id}/jobruns/{jr_id}",
+                web::get().to(job_runs::describe),
+            )
+            .route(
+                "/{vc_id}/jobruns/{jr_id}",
+                web::delete().to(job_runs::cancel),
+            ),
     );
     cfg.route("/releases", web::get().to(releases::handle_list));
+    cfg.service(
+        web::scope("/admin/api/emr")
+            .route("/jobs/{id}/complete", web::post().to(admin::job_complete))
+            .route("/jobs/{id}/fail", web::post().to(admin::job_fail)),
+    );
 }

@@ -1,7 +1,7 @@
 use crate::AppState;
-use actix_web::{web, HttpRequest, HttpResponse};
+use actix_web::{HttpRequest, HttpResponse, web};
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 #[tracing::instrument(skip(req, body, state))]
 pub async fn handle(
@@ -12,7 +12,10 @@ pub async fn handle(
 ) -> HttpResponse {
     let name = path.into_inner();
     if let Err(msg) = crate::name::validate(&name) {
-        return awsem_core::error::AwsemError::InvalidRequest(format!("Invalid FunctionName: {msg}")).to_response();
+        return awsem_core::error::AwsemError::InvalidRequest(format!(
+            "Invalid FunctionName: {msg}"
+        ))
+        .to_response();
     }
     let invocation_type = req
         .headers()
@@ -27,10 +30,7 @@ pub async fn handle(
     };
 
     let func = {
-        let c = match state.db.lock() {
-            Ok(c) => c,
-            Err(e) => return awsem_core::error::AwsemError::Internal(e.to_string()).to_response(),
-        };
+        let c = awsem_core::lock_db!(state);
         match c.query_row(
             "SELECT name, arn FROM lambda_functions WHERE name = ?1",
             rusqlite::params![name],
@@ -42,10 +42,12 @@ pub async fn handle(
     };
 
     if invocation_type == "Event" {
-        let _ = state.event_bus.send(awsem_events::BusEvent::LambdaInvocation {
-            function_arn: func.1,
-            payload: payload.to_string(),
-        });
+        let _ = state
+            .event_bus
+            .send(awsem_events::BusEvent::LambdaInvocation {
+                function_arn: func.1,
+                payload: payload.to_string(),
+            });
         return HttpResponse::Accepted().finish();
     }
 

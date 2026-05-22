@@ -56,7 +56,7 @@ pub async fn listen(state: AppState) {
                         "SELECT f.name
                          FROM lambda_event_source_mappings m
                          JOIN lambda_functions f ON m.function_arn = f.arn
-                         WHERE m.event_source_arn = ?1 AND m.enabled = 1"
+                         WHERE m.event_source_arn = ?1 AND m.enabled = 1",
                     ) {
                         Ok(s) => s,
                         Err(_) => continue,
@@ -70,7 +70,9 @@ pub async fn listen(state: AppState) {
                     rows
                 };
                 for name in rows {
-                    tracing::info!("Triggering Lambda {name} from event source mapping (S3:{bucket}/{key})");
+                    tracing::info!(
+                        "Triggering Lambda {name} from event source mapping (S3:{bucket}/{key})"
+                    );
                     crate::execute::run(&name, &payload, &state).await;
                 }
             }

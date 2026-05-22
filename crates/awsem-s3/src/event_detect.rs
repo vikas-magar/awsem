@@ -1,5 +1,5 @@
-use crate::proxy::S3State;
 use crate::notification;
+use crate::proxy::S3State;
 
 pub async fn on_success(state: &S3State, bucket: &str, key: &str) {
     if !key.ends_with("_SUCCESS") {
@@ -11,19 +11,18 @@ pub async fn on_success(state: &S3State, bucket: &str, key: &str) {
     let targets = notification::get_event_targets(&state.db, bucket, key);
 
     for (arn, target_type) in targets {
-        tracing::info!(
-            "Dispatching _SUCCESS event to {target_type}: {arn}"
-        );
+        tracing::info!("Dispatching _SUCCESS event to {target_type}: {arn}");
 
         if state.event_bus.receiver_count() > 0
-            && state.event_bus.send(
-                awsem_events::BusEvent::S3Notification {
+            && state
+                .event_bus
+                .send(awsem_events::BusEvent::S3Notification {
                     bucket: bucket.to_string(),
                     key: key.to_string(),
                     target_arn: arn,
                     target_type,
-                },
-            ).is_err()
+                })
+                .is_err()
         {
             tracing::warn!("No subscribers for S3Notification event");
         }

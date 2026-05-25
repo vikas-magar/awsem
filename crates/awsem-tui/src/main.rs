@@ -11,6 +11,9 @@ mod overview;
 mod s3;
 mod secrets;
 mod server;
+mod help;
+mod nav;
+mod theme;
 mod ui;
 
 use clap::Parser;

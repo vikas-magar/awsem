@@ -8,10 +8,19 @@ pub async fn s3_buckets(aws: &AwsClients) -> Vec<String> {
         .unwrap_or_default()
 }
 
-pub async fn s3_objects(aws: &AwsClients, bucket: &str) -> Vec<(String, i64)> {
-    aws.s3.list_objects_v2().bucket(bucket).send().await.ok()
-        .map(|o| o.contents().iter().map(|obj| (fmt0(obj.key()), obj.size().unwrap_or(0))).collect())
-        .unwrap_or_default()
+pub async fn s3_folder_objects(aws: &AwsClients, bucket: &str, prefix: &str) -> (Vec<String>, Vec<(String, i64, String)>) {
+    aws.s3.list_objects_v2().bucket(bucket).prefix(prefix).delimiter("/").send().await.ok()
+        .map(|o| {
+            let folders: Vec<String> = o.common_prefixes().iter().filter_map(|p| p.prefix().map(String::from)).collect();
+            let files: Vec<(String, i64, String)> = o.contents().iter().filter_map(|obj| {
+                let k = obj.key()?;
+                if k == prefix { return None; }
+                let m = obj.last_modified().map(|d| d.to_string()).unwrap_or_default();
+                let short = if m.len() > 16 { m[..16].to_string() } else { m };
+                Some((k.to_string(), obj.size().unwrap_or(0), short))
+            }).collect();
+            (folders, files)
+        }).unwrap_or_default()
 }
 
 pub async fn cognito_users(aws: &AwsClients) -> Vec<(String, String, String)> {

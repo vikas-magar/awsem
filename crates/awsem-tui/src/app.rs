@@ -11,19 +11,29 @@ impl Tab {
     pub fn key(&self) -> char { ['1', '2', '3', '4', '5', '6', '7'][*self as usize] }
     pub fn prev(&self) -> Self { [Self::Logs, Self::Overview, Self::S3, Self::Cognito, Self::Secrets, Self::Emr, Self::Lambda][*self as usize] }
     pub fn next(&self) -> Self { [Self::S3, Self::Cognito, Self::Secrets, Self::Emr, Self::Lambda, Self::Logs, Self::Overview][*self as usize] }
+    pub fn idx(&self) -> usize { *self as usize }
+}
+
+pub enum ConfirmAction {
+    DeleteBucket(String), DeleteObject(String, String), DeleteCognitoUser(String),
+    DeleteSecret(String), DeleteFunction(String), DeleteVc(String), CancelJob(String, String),
 }
 
 pub enum Input {
-    None, CreateUser, CreatePass(String), LambdaPayload(String), S3UploadKey(String),
+    None, CreateUser, CreatePass(String), LambdaPayload(String), S3UploadKey(String, String),
     EmrSubmit(String), LogFilter, CreateSecret, CreateSecretValue(String), EditSecret(String), CreateBucket,
 }
 
 pub struct App {
     pub aws: AwsClients, pub server: ServerManager, pub server_status: ServerStatus, pub tab: Tab,
-    pub help_visible: bool, pub error: Option<String>, pub last_refresh: Instant,
-    pub start_time: Option<Instant>, pub health_checked: Instant,
+    pub help_visible: bool, pub error: Option<String>, pub confirming: Option<(String, ConfirmAction)>, pub last_refresh: Instant,
+    pub start_time: Option<Instant>, pub health_checked: Instant, pub server_started: Option<Instant>,
     pub input: Input, pub input_buf: String, pub result: Option<(String, String)>, pub cursor: usize,
-    pub s3_buckets: Vec<String>, pub s3_objects: Vec<(String, i64)>, pub s3_bucket: String,
+    pub cursors: [usize; 7],
+    pub s3_buckets: Vec<String>, pub s3_objects: Vec<(String, i64, String)>, pub s3_bucket: String,
+    pub s3_prefix: String, pub s3_folders: Vec<String>,
+    pub s3_col: usize, pub s3_cursors: [usize; 3],
+    pub s3_col3_folders: Vec<String>, pub s3_col3_objects: Vec<(String, i64, String)>, pub s3_col3_prefix: String,
     pub cognito_users: Vec<(String, String, String)>,
     pub secrets: Vec<(String, String, String)>,
     pub lambda_funcs: Vec<(String, String, i64)>,
@@ -36,15 +46,22 @@ impl App {
         Self {
             aws, server: ServerManager::new(binary, args),
             server_status: ServerStatus::Stopped, tab: Tab::Overview,
-            help_visible: false, error: None, last_refresh: Instant::now(),
-            start_time: None, health_checked: Instant::now(),
+            help_visible: false, error: None, confirming: None, last_refresh: Instant::now(),
+            start_time: None, health_checked: Instant::now(), server_started: None,
             input: Input::None, input_buf: String::new(), result: None, cursor: 0,
+            cursors: [0; 7],
             s3_buckets: Vec::new(), s3_objects: Vec::new(), s3_bucket: String::new(),
+            s3_prefix: String::new(), s3_folders: Vec::new(),
+            s3_col: 0, s3_cursors: [0; 3],
+            s3_col3_folders: Vec::new(), s3_col3_objects: Vec::new(), s3_col3_prefix: String::new(),
             cognito_users: Vec::new(), secrets: Vec::new(),
             lambda_funcs: Vec::new(), emr_vcs: Vec::new(), emr_jobs: Vec::new(), emr_vc_id: String::new(),
             logs: Vec::new(), logs_filter: String::new(), log_file: String::new(),
         }
     }
+
+    pub fn save_cursor(&mut self) { self.cursors[self.tab.idx()] = self.cursor; }
+    pub fn load_cursor(&mut self, t: Tab) { self.cursor = self.cursors[t.idx()]; }
 
     pub async fn refresh_all(&mut self) {
         if !matches!(self.server_status, ServerStatus::Running) { return; }
@@ -66,7 +83,14 @@ impl App {
             }
             Tab::S3 => {
                 self.s3_buckets = fetchers::s3_buckets(&self.aws).await;
-                self.s3_objects = if self.s3_bucket.is_empty() { Vec::new() } else { fetchers::s3_objects(&self.aws, &self.s3_bucket).await };
+                if !self.s3_bucket.is_empty() {
+                    let (folders, files) = fetchers::s3_folder_objects(&self.aws, &self.s3_bucket, &self.s3_prefix).await;
+                    self.s3_folders = folders; self.s3_objects = files;
+                }
+                if !self.s3_col3_prefix.is_empty() {
+                    let (folders, files) = fetchers::s3_folder_objects(&self.aws, &self.s3_bucket, &self.s3_col3_prefix).await;
+                    self.s3_col3_folders = folders; self.s3_col3_objects = files;
+                }
             }
             Tab::Cognito => self.cognito_users = fetchers::cognito_users(&self.aws).await,
             Tab::Secrets => self.secrets = fetchers::secrets(&self.aws).await,
@@ -77,18 +101,21 @@ impl App {
             Tab::Lambda => self.lambda_funcs = fetchers::lambda_funcs(&self.aws).await,
             Tab::Logs => self.logs = fetchers::read_log_file(&self.log_file, &self.logs_filter).await,
         }
-        let len = match self.tab {
-            Tab::S3 => if self.s3_bucket.is_empty() { self.s3_buckets.len() } else { self.s3_objects.len() },
+        let len = self.list_len();
+        if self.cursor > len.saturating_sub(1) { self.cursor = len.saturating_sub(1); }
+    }
+
+    pub fn list_len(&self) -> usize {
+        match self.tab {
+            Tab::Overview => 0,
+            Tab::S3 => if self.s3_bucket.is_empty() || self.s3_col == 0 { self.s3_buckets.len() } else if self.s3_col == 1 { self.s3_folders.len() + self.s3_objects.len() } else { self.s3_col3_folders.len() + self.s3_col3_objects.len() },
             Tab::Cognito => self.cognito_users.len(),
             Tab::Secrets => self.secrets.len(),
             Tab::Emr => if self.emr_vc_id.is_empty() { self.emr_vcs.len() } else { self.emr_jobs.len() },
             Tab::Lambda => self.lambda_funcs.len(),
             Tab::Logs => self.logs.len(),
-            _ => 0,
-        };
-        if self.cursor > len.saturating_sub(1) { self.cursor = len.saturating_sub(1); }
+        }
     }
-
     pub async fn submit_input(&mut self) {
         let val = std::mem::take(&mut self.input_buf);
         let prev = std::mem::replace(&mut self.input, Input::None);
@@ -101,9 +128,15 @@ impl App {
                 let r = actions::invoke_lambda(&self.aws, &func, &val).await;
                 self.result = Some(("Invoke".into(), r));
             }
-            Input::S3UploadKey(bucket) => {
-                let content = format!("uploaded by awsem-tui at {}", chrono::Utc::now());
-                self.result = Some(("Upload".into(), actions::upload_object(&self.aws, &bucket, &val, content.as_bytes()).await));
+            Input::S3UploadKey(bucket, prefix) => {
+                match tokio::fs::read(&val).await {
+                    Ok(content) => {
+                        let filename = std::path::Path::new(&val).file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or(val.clone());
+                        let full_key = if prefix.is_empty() { filename } else { format!("{prefix}{filename}") };
+                        self.result = Some(("Upload".into(), actions::upload_object(&self.aws, &bucket, &full_key, &content).await));
+                    }
+                    Err(e) => self.result = Some(("Upload".into(), format!("Error: {e}"))),
+                }
             }
             Input::EmrSubmit(vc) => self.result = Some(("Submit Job".into(), actions::submit_job(&self.aws, &vc, &val).await)),
             Input::LogFilter => { self.logs_filter = val; self.refresh_all().await; return; }

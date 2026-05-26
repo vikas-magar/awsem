@@ -1,137 +1,131 @@
-use crate::app::{App, Input, Tab};
-use crate::server::ServerStatus;
-use crate::theme;
 use ratatui::Frame;
-use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
-use ratatui::style::{Modifier, Style};
+use ratatui::layout::{Constraint, Layout, Rect};
+use ratatui::style::Style;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Clear, Paragraph, Tabs, Wrap};
+use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap};
+
+use crate::app::{App, ViewMode};
+use crate::browser;
+use crate::header;
+use crate::panel::{self, PanelConfig};
+use crate::sidebar::{self, SidebarItem};
+use crate::status;
+use crate::table::{Col, left, right};
+use crate::theme;
+
+fn panel_cols(avail: u16, specs: &[(&'static str, f32, fn(&str, usize) -> String)]) -> Vec<Col> {
+    let a = avail.saturating_sub(2) as usize;
+    let tr: f32 = specs.iter().map(|(_, r, _)| r).sum();
+    let sp = 2 * (specs.len().saturating_sub(1));
+    let mut used = 0usize;
+    specs.iter().enumerate().map(|(i, (label, ratio, align))| {
+        let w = if i == specs.len() - 1 { a.saturating_sub(used + sp) } else { (a as f32 * ratio / tr).max(6.0) as usize };
+        used += w + 2;
+        Col { label, width: w, align: *align }
+    }).collect()
+}
 
 pub fn render(frame: &mut Frame, app: &App) {
-    let vert = Layout::new(Direction::Vertical, [Constraint::Length(3), Constraint::Min(0), Constraint::Length(1)]).split(frame.area());
-    render_header(frame, vert[0], app); render_content(frame, vert[1], app); render_footer(frame, vert[2], app);
+    let outer = Block::default().borders(Borders::ALL).border_type(BorderType::Plain).border_style(theme::frame());
+    let inner = outer.inner(frame.area());
+    frame.render_widget(outer, frame.area());
+
+    let vert = Layout::vertical([Constraint::Length(1), Constraint::Min(0), Constraint::Length(1)]).split(inner);
+    header::render(frame, vert[0], &app.aws.endpoint, &app.server_status, 0);
+
+    match app.mode {
+        ViewMode::Dashboard => render_dashboard(frame, vert[1], app, app.active_panel, &app.global_filter),
+        ViewMode::BucketBrowser => browser::render(frame, vert[1], app),
+        ViewMode::UploadMode => {
+            let split = Layout::vertical([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)]).split(vert[1]);
+            browser::render(frame, split[0], app);
+            crate::upload::render(frame, split[1], &app.upload, &app.browser_bucket, &app.browser_path);
+        }
+        ViewMode::DetailPopup => crate::detail::render(frame, vert[1], &app.popup_title, &app.popup_lines),
+        ViewMode::FormPopup => {
+            render_dashboard(frame, vert[1], app, app.active_panel, &app.global_filter);
+            crate::form::render(frame, frame.area(), &app.form);
+        }
+    }
+
+    let age = app.last_refresh.elapsed().as_secs();
+    let hints = match app.mode {
+        ViewMode::Dashboard => get_dashboard_hints(app.active_panel),
+        ViewMode::BucketBrowser => "↑↓ · ↩ drill · ← back · u upload · r refresh · q quit",
+        ViewMode::UploadMode => "↑↓ nav · space select · → enter dir · ← parent · u/↩ upload · Esc close",
+        ViewMode::DetailPopup => "Esc/Enter to dismiss",
+        ViewMode::FormPopup => "Tab/↑↓ navigate · Enter submit · Esc cancel",
+    };
+    status::render(frame, vert[2], hints, age);
+
     if app.help_visible { crate::help::render(frame, frame.area()); }
-    if app.result.is_some() { render_result(frame, frame.area(), app); }
-    if !matches!(app.input, Input::None) { render_input(frame, frame.area(), app); }
-    if app.confirming.is_some() { render_confirm(frame, frame.area(), app); }
+    if let Some((title, msg)) = &app.result { render_result(frame, frame.area(), title, msg); }
+    if let Some(ref e) = app.error { render_result(frame, frame.area(), "Error", e); }
 }
 
-fn render_header(frame: &mut Frame, area: Rect, app: &App) {
-    let titles: Vec<Line> = Tab::ALL.iter().map(|t| {
-        let sel = std::mem::discriminant(t) == std::mem::discriminant(&app.tab);
-        let label = format!(" {} {} ", t.key(), t.name());
-        let style = if sel { Style::default().fg(theme::ACCENT).add_modifier(Modifier::BOLD) } else { Style::default().fg(theme::MUTED) };
-        Line::from(Span::styled(label, style))
-    }).collect();
-    let status = match &app.server_status {
-        ServerStatus::Running => "● Running",
-        ServerStatus::Stopped => "○ Stopped",
-        ServerStatus::Starting => "◌ Starting",
-        ServerStatus::Failed(_) => "✕ Error",
-    };
-    let status_color = match &app.server_status {
-        ServerStatus::Running => theme::SUCCESS,
-        ServerStatus::Stopped => theme::MUTED,
-        ServerStatus::Starting => theme::WARN,
-        ServerStatus::Failed(_) => theme::ERROR,
-    };
-    let title = Line::from(vec![
-        Span::styled(" awsem ", Style::default().fg(theme::ACCENT).add_modifier(Modifier::BOLD)),
-        Span::styled(format!("{} ", app.aws.endpoint), theme::muted()),
-        Span::styled(status, Style::default().fg(status_color)),
-    ]);
-    let block = Block::default().title(title).borders(Borders::ALL).border_style(theme::muted());
-    frame.render_widget(Tabs::new(titles).block(block).divider(" ").style(theme::muted()), area);
+fn render_dashboard(frame: &mut Frame, area: Rect, app: &App, active: usize, filter: &str) {
+    let body = Layout::horizontal([Constraint::Length(18), Constraint::Min(0)]).split(area);
+    let sb_items = vec![
+        SidebarItem { key: '1', label: "S3", count: app.s3_buckets.len() },
+        SidebarItem { key: '2', label: "EMR", count: app.emr_vcs.len() },
+        SidebarItem { key: '3', label: "Cognito", count: app.cognito_users.len() },
+        SidebarItem { key: '4', label: "Secrets", count: app.secrets.len() },
+        SidebarItem { key: '5', label: "Lambda", count: app.lambda_funcs.len() },
+    ];
+    sidebar::render(frame, body[0], &sb_items, active.min(4));
+
+    let rows = Layout::vertical([Constraint::Ratio(1, 3), Constraint::Ratio(1, 3), Constraint::Ratio(1, 3)]).split(body[1]);
+    let top = Layout::horizontal([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)]).split(rows[0]);
+    let mid = Layout::horizontal([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)]).split(rows[1]);
+    let s3c = panel_cols(top[0].width, &[("Name", 6.0, left), ("Created", 4.0, left)]);
+    render_panel(frame, top[0], app, 0, filter, " S3 BUCKETS ", &s3c,
+        &app.s3_buckets, |b: &crate::types::S3Bucket| vec![b.name.clone(), b.created.clone()], &[]);
+    let emrc = panel_cols(top[1].width, &[("Name", 6.0, left), ("State", 4.0, left)]);
+    render_panel(frame, top[1], app, 1, filter, " EMR VIRTUAL CLUSTERS ", &emrc,
+        &app.emr_vcs, |v: &crate::types::EmrVc| vec![v.name.clone(), v.state.clone()], &[("Running", app.emr_vcs.iter().filter(|v| v.state.contains("RUNNING")).count())]);
+    let cogc = panel_cols(mid[0].width, &[("Username", 4.0, left), ("Status", 3.0, left), ("Email", 3.0, left)]);
+    render_panel(frame, mid[0], app, 2, filter, " COGNITO USERS ", &cogc,
+        &app.cognito_users, |u: &crate::types::CognitoUser| vec![u.username.clone(), u.status.clone(), u.email.clone()], &[]);
+    let secc = panel_cols(mid[1].width, &[("Name", 5.0, left), ("Rot", 2.0, left), ("Status", 3.0, left)]);
+    render_panel(frame, mid[1], app, 3, filter, " SECRETS MANAGER ", &secc,
+        &app.secrets, |s: &crate::types::SecretEntry| vec![s.name.clone(), s.rotation.clone(), s.status.clone()], &[("Rotation Enabled", app.secrets.iter().filter(|s| s.rotation == "ENABLED").count())]);
+    let lamc = panel_cols(rows[2].width, &[("Name", 5.0, left), ("Runtime", 3.0, left), ("Timeout", 2.0, right)]);
+    render_panel(frame, rows[2], app, 4, filter, " LAMBDA FUNCTIONS ", &lamc,
+        &app.lambda_funcs, |f: &crate::types::LambdaFn| vec![f.name.clone(), f.runtime.clone(), format!("{}s", f.timeout)], &[]);
 }
 
-fn render_content(frame: &mut Frame, area: Rect, app: &App) {
-    match app.tab {
-        Tab::Overview => crate::overview::render(frame, area, app),
-        Tab::S3 => crate::s3::render(frame, area, app),
-        Tab::Cognito => crate::cognito::render(frame, area, app),
-        Tab::Secrets => crate::secrets::render(frame, area, app),
-        Tab::Emr => crate::emr::render(frame, area, app),
-        Tab::Lambda => crate::lambda::render(frame, area, app),
-        Tab::Logs => crate::logs::render(frame, area, app),
+fn get_dashboard_hints(active: usize) -> &'static str {
+    match active {
+        0 => "↑↓ · ↩ browse · c create · d delete · u upload · r refresh",
+        1 => "↑↓ · s submit · d delete · r refresh", 2 => "↑↓ · c create · d delete · r refresh",
+        3 => "↑↓ · c create · e edit · d delete · r refresh", 4 => "↑↓ · i invoke · d delete · r refresh",
+        _ => "↑↓ · r refresh · q quit",
     }
 }
 
-fn render_footer(frame: &mut Frame, area: Rect, app: &App) {
-    let age = app.last_refresh.elapsed().as_secs();
-    let text = if matches!(app.input, Input::None) {
-        let mut parts = vec!["↑↓ sel".to_string(), "r ref".to_string(), "? help".to_string(), "S pwr".to_string(), "q quit".to_string()];
-        match app.tab {
-            Tab::S3 => {
-                if app.s3_bucket.is_empty() { parts.push("c create".into()); }
-                else { parts.push("u upload".into()); }
-                if !app.s3_bucket.is_empty() && !app.s3_prefix.is_empty() { parts.push("Esc up".into()); }
-                else { parts.push("Esc back".into()); }
-            }
-            Tab::Cognito => { parts.push("c create".into()); parts.push("d delete".into()); }
-            Tab::Secrets => { parts.push("c create".into()); parts.push("d delete".into()); parts.push("e edit".into()); }
-            Tab::Emr => { parts.push("s submit".into()); parts.push("d del/cancel".into()); }
-            Tab::Lambda => { parts.push("i invoke".into()); parts.push("d delete".into()); }
-            Tab::Logs => { parts.push("f filter".into()); }
-            _ => {}
-        }
-        if app.log_file.is_empty() { parts.push(format!("{}s", age)); }
-        else { parts.push(format!("{} {}s", &app.log_file[..app.log_file.len().min(20)], age)); }
-        parts.join("  |  ")
-    } else { "Esc cancel  Enter submit  |  typing...".into() };
-    let style = if age > 30 && matches!(app.input, Input::None) { Style::default().fg(theme::ERROR) } else { theme::muted() };
-    frame.render_widget(Paragraph::new(text).style(style), area);
+fn render_panel<T, F>(frame: &mut Frame, area: Rect, app: &App, idx: usize, global_filter: &str, title: &'static str, cols: &[Col], items: &[T], mapper: F, extra: &[(&str, usize)])
+where F: Fn(&T) -> Vec<String> {
+    let f = if idx == app.active_panel { global_filter } else { "" };
+    let mut summary: Vec<(String, String)> = vec![("Total".into(), items.len().to_string())];
+    for (k, v) in extra { summary.push((k.to_string(), v.to_string())); }
+    let rows: Vec<Vec<String>> = items.iter().filter(|x| f.is_empty() || mapper(x).join(" ").contains(f)).map(|x| mapper(x)).collect();
+    panel::render(frame, area, &PanelConfig {
+        title, summary, cols, rows, selected: app.panel_cursor(idx), scroll: app.panel_scroll(idx),
+        filter: f.to_string(), focus: app.active_panel == idx,
+    });
 }
 
-fn render_input(frame: &mut Frame, area: Rect, app: &App) {
-    let prompt = match &app.input {
-        Input::CreateUser => "New username:",
-        Input::CreatePass(_) => "Password:",
-        Input::LambdaPayload(_) => "Payload (JSON):",
-        Input::S3UploadKey(..) => "Local file path:",
-        Input::EmrSubmit(_) => "Entry point (s3://path):",
-        Input::LogFilter => "Filter:",
-        Input::CreateSecret => "Secret name:",
-        Input::CreateSecretValue(_) => "Secret value:",
-        Input::EditSecret(_) => "New value:",
-        Input::CreateBucket => "Bucket name:",
-        _ => return,
-    };
-    let cursor = if app.input_buf.len() < 60 { format!("{}{}", app.input_buf, "█") } else { format!("...{}█", &app.input_buf[app.input_buf.len()-57..]) };
-    let w = std::cmp::min(70, area.width);
-    let inner = Rect { x: (area.width - w) / 2, y: area.height / 2 - 2, width: w, height: 3 };
-    frame.render_widget(Clear, inner);
-    frame.render_widget(Paragraph::new(cursor).block(Block::default().title(format!(" {prompt} ")).borders(Borders::ALL).border_style(theme::accent())).wrap(Wrap { trim: false }), inner);
-}
-
-fn render_result(frame: &mut Frame, area: Rect, app: &App) {
-    let (title, msg) = app.result.as_ref().unwrap();
-    let is_err = msg.starts_with("ServiceError") || msg.starts_with("Unknown") || msg.contains("error") || msg.contains("Error");
+fn render_result(frame: &mut Frame, area: Rect, title: &str, msg: &str) {
+    let is_err = msg.contains("error") || msg.contains("Error");
     let color = if is_err { theme::ERROR } else { theme::SUCCESS };
-    let lines = vec![
-        Line::from(""),
-        Line::from(format!(" {} ", title)).style(Style::default().fg(color).add_modifier(Modifier::BOLD)),
-        Line::from(""),
-        Line::from(format!(" {}", msg)).style(Style::default().fg(theme::TEXT)),
-        Line::from(""),
-        Line::from(" Press any key to dismiss").style(theme::muted()),
-    ];
-    let w = std::cmp::min(70, area.width); let h = std::cmp::min(12, area.height);
+    let w = 60u16.min(area.width.saturating_sub(4));
+    let h = 8u16.min(area.height.saturating_sub(4));
     let inner = Rect { x: (area.width - w) / 2, y: (area.height - h) / 2, width: w, height: h };
     frame.render_widget(Clear, inner);
-    frame.render_widget(Paragraph::new(lines).block(Block::default().title(" Result ").borders(Borders::ALL).border_style(Style::default().fg(color))).alignment(Alignment::Center), inner);
-}
-
-fn render_confirm(frame: &mut Frame, area: Rect, app: &App) {
-    let (msg, _) = app.confirming.as_ref().unwrap();
     let lines = vec![
-        Line::from(""),
-        Line::from(format!(" {} ", msg)).style(Style::default().fg(theme::WARN).add_modifier(Modifier::BOLD)),
-        Line::from(""),
-        Line::from(" (y)es  /  (n)o ").style(theme::muted()),
+        Line::from(""), Line::from(Span::styled(title, Style::default().fg(color))),
+        Line::from(""), Line::from(Span::styled(msg, Style::default().fg(theme::FG))),
+        Line::from(""), Line::from(Span::styled("Press any key", theme::muted())),
     ];
-    let w = std::cmp::min(60, area.width);
-    let h = std::cmp::min(7, area.height);
-    let inner = Rect { x: (area.width - w) / 2, y: (area.height - h) / 2, width: w, height: h };
-    frame.render_widget(Clear, inner);
-    frame.render_widget(Paragraph::new(lines).block(Block::default().title(" Confirm ").borders(Borders::ALL).border_style(theme::warn())).alignment(Alignment::Center), inner);
+    frame.render_widget(Paragraph::new(lines).block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(color))).wrap(Wrap { trim: false }), inner);
 }

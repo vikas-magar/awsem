@@ -15,14 +15,11 @@ pub async fn upload_object(aws: &AwsClients, bucket: &str, key: &str, content: &
     }
 }
 
-pub async fn delete_object(aws: &AwsClients, bucket: &str, key: &str) -> String {
-    match aws.s3.delete_object().bucket(bucket).key(key).send().await { Ok(_) => "Deleted".into(), Err(e) => format!("{e}") }
-}
-
-pub async fn create_user(aws: &AwsClients, username: &str, password: &str) -> String {
-    match aws.cognito.admin_create_user().user_pool_id("us-east-1_default").username(username).temporary_password(password).send().await {
-        Ok(_) => "User created".into(), Err(e) => format!("{e}"),
-    }
+pub async fn create_user(aws: &AwsClients, username: &str, email: &str, password: &str) -> String {
+    let mut req = aws.cognito.admin_create_user().user_pool_id("us-east-1_default").username(username);
+    if !password.is_empty() { req = req.temporary_password(password); }
+    if !email.is_empty() { req = req.user_attributes(aws_sdk_cognitoidentityprovider::types::AttributeType::builder().name("email").value(email).build().unwrap()); }
+    match req.send().await { Ok(_) => "Created".into(), Err(e) => format!("{e}") }
 }
 
 pub async fn delete_user(aws: &AwsClients, username: &str) -> String {
@@ -31,10 +28,10 @@ pub async fn delete_user(aws: &AwsClients, username: &str) -> String {
     }
 }
 
-pub async fn create_secret(aws: &AwsClients, name: &str, value: &str) -> String {
-    match aws.secrets.create_secret().name(name).secret_string(value).send().await {
-        Ok(_) => "Created".into(), Err(e) => format!("{e}"),
-    }
+pub async fn create_secret(aws: &AwsClients, name: &str, value: &str, description: &str) -> String {
+    let mut req = aws.secrets.create_secret().name(name).secret_string(value);
+    if !description.is_empty() { req = req.description(description); }
+    match req.send().await { Ok(_) => "Created".into(), Err(e) => format!("{e}") }
 }
 
 pub async fn edit_secret(aws: &AwsClients, name: &str, value: &str) -> String {
@@ -65,25 +62,13 @@ pub async fn delete_vc(aws: &AwsClients, id: &str) -> String {
     match aws.emr.delete_virtual_cluster().id(id).send().await { Ok(_) => "Deleted".into(), Err(e) => format!("{e}") }
 }
 
-pub async fn cancel_job(aws: &AwsClients, vc: &str, job: &str) -> String {
-    match aws.emr.cancel_job_run().virtual_cluster_id(vc).id(job).send().await { Ok(_) => "Cancelled".into(), Err(e) => format!("{e}") }
-}
-
-pub async fn submit_job(aws: &AwsClients, vc: &str, entry_point: &str) -> String {
-    let jd = aws_sdk_emrcontainers::types::JobDriver::builder()
-        .spark_submit_job_driver(
-            aws_sdk_emrcontainers::types::SparkSubmitJobDriver::builder()
-                .entry_point(entry_point)
-                .spark_submit_parameters("--conf spark.executor.instances=1")
-                .build()
-                .expect("SparkSubmitJobDriver build")
-        ).build();
+pub async fn submit_job(aws: &AwsClients, vc: &str, entry_point: &str, role_arn: &str, release_label: &str, spark_params: &str) -> String {
+    use aws_sdk_emrcontainers::types::{JobDriver, SparkSubmitJobDriver};
+    let driver = JobDriver::builder()
+        .spark_submit_job_driver(SparkSubmitJobDriver::builder().entry_point(entry_point).spark_submit_parameters(spark_params).build().expect("build"))
+        .build();
     match aws.emr.start_job_run().name(format!("job-{}", chrono::Utc::now().timestamp()))
-        .virtual_cluster_id(vc)
-        .execution_role_arn("arn:aws:iam::123456789012:role/emr-role")
-        .release_label("emr-7.5.0-latest")
-        .job_driver(jd).send().await
-    {
-        Ok(_) => "Job submitted".into(), Err(e) => format!("{e}"),
-    }
+        .virtual_cluster_id(vc).execution_role_arn(role_arn)
+        .release_label(release_label).job_driver(driver).send().await
+    { Ok(_) => "Submitted".into(), Err(e) => format!("{e}") }
 }

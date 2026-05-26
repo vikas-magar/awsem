@@ -1,26 +1,26 @@
-mod actions;
 mod app;
 mod aws_clients;
-mod cognito;
-mod emr;
-mod event_loop;
-mod fetchers;
-mod lambda;
-mod logs;
-mod overview;
-mod s3;
-mod secrets;
 mod server;
-mod help;
-mod nav;
+mod types;
 mod theme;
+mod table;
+mod header;
+mod sidebar;
+mod panel;
+mod browser;
+mod status;
+mod fetchers;
+mod actions;
+mod help;
+mod form;
+mod detail;
+mod upload;
+mod event_loop;
 mod ui;
 
 use clap::Parser;
 use crossterm::execute;
-use crossterm::terminal::{
-    EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
-};
+use crossterm::terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode};
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 use server::ServerStatus;
@@ -41,36 +41,20 @@ async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     enable_raw_mode()?;
     let mut stdout = stdout();
-    execute!(
-        stdout,
-        EnterAlternateScreen,
-        crossterm::event::EnableMouseCapture
-    )?;
+    execute!(stdout, EnterAlternateScreen, crossterm::event::EnableMouseCapture)?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout))?;
 
     let aws = aws_clients::AwsClients::new(&args.endpoint).await;
     let mut app = app::App::new(aws, &args.binary, &args.args);
-    app.server_status = if app.aws.check_health().await {
-        ServerStatus::Running
-    } else {
-        ServerStatus::Stopped
-    };
-    if matches!(app.server_status, ServerStatus::Running) {
-        app.refresh_all().await;
-    }
+    app.server_status = if app.aws.check_health().await { ServerStatus::Running } else { ServerStatus::Stopped };
+    if matches!(app.server_status, ServerStatus::Running) { app.refresh_all().await; }
 
     let res = event_loop::run(&mut terminal, &mut app).await;
 
     disable_raw_mode()?;
-    execute!(
-        terminal.backend_mut(),
-        LeaveAlternateScreen,
-        crossterm::event::DisableMouseCapture
-    )?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen, crossterm::event::DisableMouseCapture)?;
     terminal.show_cursor()?;
     app.server.stop().await;
-    if let Err(e) = res {
-        eprintln!("Error: {e}");
-    }
+    if let Err(e) = res { eprintln!("Error: {e}"); }
     Ok(())
 }

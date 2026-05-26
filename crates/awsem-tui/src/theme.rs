@@ -1,29 +1,28 @@
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Color, Style};
 
-pub const ACCENT: Color = Color::Cyan;
-pub const SELECTED: Color = Color::Green;
-pub const SUCCESS: Color = Color::Green;
-pub const WARN: Color = Color::Yellow;
-pub const ERROR: Color = Color::Red;
-pub const MUTED: Color = Color::DarkGray;
-pub const TEXT: Color = Color::White;
+pub const ACCENT: Color = Color::Rgb(74, 158, 255);
+pub const FG: Color = Color::Rgb(192, 192, 192);
+pub const FRAME: Color = ACCENT;
+pub const PANEL_BORDER: Color = Color::Rgb(58, 58, 58);
+pub const HEADER_BG: Color = Color::Rgb(26, 26, 26);
+pub const HEADER_FG: Color = Color::Rgb(255, 255, 255);
+pub const SIDEBAR_BG: Color = Color::Rgb(13, 13, 13);
+pub const SELECTED: Color = ACCENT;
+pub const SELECTED_BG: Color = Color::Rgb(22, 34, 50);
+pub const SUCCESS: Color = Color::Rgb(74, 154, 106);
+pub const WARN: Color = Color::Rgb(154, 138, 74);
+pub const ERROR: Color = Color::Rgb(154, 74, 74);
+pub const MUTED: Color = Color::Rgb(106, 106, 106);
+pub const LABEL: Color = Color::Rgb(138, 138, 138);
 
-pub fn selected() -> Style { Style::default().fg(SELECTED).add_modifier(Modifier::BOLD) }
+pub fn frame() -> Style { Style::default().fg(FRAME) }
+pub fn header() -> Style { Style::default().fg(HEADER_FG).bg(HEADER_BG) }
+pub fn sidebar() -> Style { Style::default().fg(FG).bg(SIDEBAR_BG) }
+pub fn sidebar_active() -> Style { Style::default().fg(SELECTED).bg(SIDEBAR_BG) }
 pub fn accent() -> Style { Style::default().fg(ACCENT) }
+pub fn panel_border() -> Style { Style::default().fg(PANEL_BORDER) }
+pub fn selected() -> Style { Style::default().fg(SELECTED).bg(SELECTED_BG) }
 pub fn muted() -> Style { Style::default().fg(MUTED) }
 pub fn success() -> Style { Style::default().fg(SUCCESS) }
 pub fn warn() -> Style { Style::default().fg(WARN) }
-
-
-pub fn status_style(s: &str) -> Style {
-    if s.contains("RUNNING") || s.contains("COMPLETED") || s.contains("CONFIRMED") || s.contains("Enabled") { success() }
-    else if s.contains("FAILED") || s.contains("TERMINATED") || s.contains("ERROR") { Style::default().fg(ERROR) }
-    else { Style::default().fg(WARN) }
-}
-
-pub fn fmt_size(bytes: i64) -> String {
-    if bytes < 1024 { format!("{bytes}B") }
-    else if bytes < 1024 * 1024 { format!("{:.1}K", bytes as f64 / 1024.0) }
-    else if bytes < 1024 * 1024 * 1024 { format!("{:.1}M", bytes as f64 / (1024.0 * 1024.0)) }
-    else { format!("{:.1}G", bytes as f64 / (1024.0 * 1024.0 * 1024.0)) }
-}
+pub fn error() -> Style { Style::default().fg(ERROR) }

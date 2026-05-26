@@ -1,6 +1,7 @@
 use aws_credential_types::Credentials;
 use std::time::Duration;
 
+#[derive(Clone)]
 pub struct AwsClients {
     pub s3: aws_sdk_s3::Client,
     pub cognito: aws_sdk_cognitoidentityprovider::Client,

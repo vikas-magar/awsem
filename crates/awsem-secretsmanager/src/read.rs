@@ -3,8 +3,8 @@ use crate::AppState;
 use actix_web::HttpResponse;
 use serde_json::{Value, json};
 
-fn to_date(s: &str) -> i64 {
-    chrono::DateTime::parse_from_rfc3339(s).map(|d| d.timestamp_millis()).unwrap_or(0)
+fn to_date(s: &str) -> f64 {
+    chrono::DateTime::parse_from_rfc3339(s).map(|d| d.timestamp() as f64 + d.timestamp_subsec_millis() as f64 / 1000.0).unwrap_or(0.0)
 }
 
 pub async fn describe_secret(input: Value, state: &AppState) -> HttpResponse {

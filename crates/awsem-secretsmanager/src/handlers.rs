@@ -82,7 +82,7 @@ async fn delete_secret(input: Value, state: &AppState) -> HttpResponse {
     if let Err(e) = store::soft_delete(&state.db, &secret.id) {
         return awsem_core::error::AwsemError::Internal(e).secrets_response();
     }
-    HttpResponse::Ok().json(json!({"ARN": secret.arn, "Name": secret.name, "DeletionDate": chrono::Utc::now().timestamp_millis()}))
+    HttpResponse::Ok().json(json!({"ARN": secret.arn, "Name": secret.name, "DeletionDate": chrono::Utc::now().timestamp()}))
 }
 
 async fn restore_secret(input: Value, state: &AppState) -> HttpResponse {

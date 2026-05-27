@@ -14,12 +14,12 @@ pub async fn submit_step(state: &AppState, vc_id: &str, step: &Value, id: &str) 
     let jd = json!({"sparkSubmitJobDriver": {"entryPoint": jar, "entryPointArguments": args, "sparkSubmitParameters": ""}});
     let job_name = format!("emr-step-{id}");
     {
-        let c = match state.db.lock() { Ok(c) => c, Err(_) => return };
+        let Ok(c) = state.db.lock() else { tracing::error!("DB lock in submit_step"); return };
         let arn = state.aws.emr_job_arn(vc_id, id);
         let _ = c.execute("INSERT INTO emr_job_runs (id, name, arn, virtual_cluster_id, job_driver_json, state, kubernetes_job_name, step_id) VALUES (?1, ?2, ?3, ?4, ?5, 'SUBMITTED', ?6, ?7)", params![id, sname, arn, vc_id, jd.to_string(), job_name, step_id]);
     }
     if let (Some(client), Some(ns)) = (&state.k8s_client, {
-        let c = match state.db.lock() { Ok(c) => c, Err(_) => return };
+        let Ok(c) = state.db.lock() else { tracing::error!("DB lock in submit_step ns query"); return };
         c.query_row("SELECT namespace FROM emr_virtual_clusters WHERE id = ?1", params![vc_id], |r| r.get::<_,String>(0)).ok()
     }) {
         spawner::ensure_rbac(client, &ns).await;

@@ -56,7 +56,7 @@ pub async fn admin_delete_user(input: Value, state: &AppState) -> HttpResponse {
     let username = input.get("Username").and_then(|v| v.as_str()).unwrap_or("");
     let pid = input.get("UserPoolId").and_then(|v| v.as_str()).unwrap_or(&state.aws.default_pool_id);
     if let Err(e) = store::delete_user(&state.db, pid, username) {
-        return AwsemError::NotFound(e).cognito_response();
+        return AwsemError::Internal(e).cognito_response();
     }
     HttpResponse::Ok().json(json!({}))
 }

@@ -1,14 +1,8 @@
 use crate::AppState;
 use actix_web::{HttpResponse, web};
-use chrono::NaiveDateTime;
 use rusqlite::params;
 use serde_json::{Value, json};
-
-fn to_rfc3339(sqlite_ts: &str) -> String {
-    NaiveDateTime::parse_from_str(sqlite_ts, "%Y-%m-%d %H:%M:%S")
-        .map(|dt| dt.and_utc().to_rfc3339())
-        .unwrap_or_else(|_| sqlite_ts.to_string())
-}
+use crate::emr_classic::to_rfc3339;
 
 pub async fn list(state: web::Data<AppState>, path: web::Path<String>) -> HttpResponse {
     let vc_id = path.into_inner();

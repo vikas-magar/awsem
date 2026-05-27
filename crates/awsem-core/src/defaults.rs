@@ -1,26 +1,24 @@
 use crate::config::{AppConfig, ConfigFile};
 
+fn awsem_home() -> Option<std::path::PathBuf> {
+    let home = std::env::var("HOME").ok()?;
+    Some(std::path::PathBuf::from(home).join(".config").join("awsem"))
+}
+
 pub fn default_config_path() -> Option<String> {
-    let base = dirs::config_dir()?;
-    Some(base.join("awsem").join("config.toml").to_string_lossy().into())
+    Some(awsem_home()?.join("config.toml").to_string_lossy().into())
 }
 
 pub fn default_data_dir() -> Option<String> {
-    let base = dirs::config_dir()?;
-    Some(base.join("awsem").join("data").to_string_lossy().into())
+    Some(awsem_home()?.join("data").to_string_lossy().into())
 }
 
 pub fn default_log_dir() -> Option<String> {
-    let base = dirs::config_dir()?;
-    Some(base.join("awsem").join("logs").to_string_lossy().into())
+    Some(awsem_home()?.join("logs").to_string_lossy().into())
 }
 
 pub fn default_db_path(port: u16) -> String {
-    if let Some(base) = dirs::config_dir() {
-        base.join("awsem").join("awsem.db").to_string_lossy().into()
-    } else {
-        format!("awsem-{port}.db")
-    }
+    awsem_home().map(|p| p.join("awsem.db").to_string_lossy().into()).unwrap_or_else(|| format!("awsem-{port}.db"))
 }
 
 pub fn default_jwt_secret() -> String { uuid::Uuid::new_v4().to_string() }

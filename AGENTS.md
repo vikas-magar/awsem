@@ -54,7 +54,7 @@ PVC from a prior run may get stuck in `Terminating` — deploy retry loop handle
 AWS_ACCESS_KEY_ID=awsem AWS_SECRET_ACCESS_KEY=awsem aws s3api ...
 ```
 
-RustFS env vars in K8s Deployment: `RUSTFS_ROOT_USER=awsem`, `RUSTFS_ROOT_PASSWORD=awsem`, `RUSTFS_DEFAULT_REGION=us-east-1`.
+RustFS env vars in K8s Deployment: `RUSTFS_ACCESS_KEY=awsem`, `RUSTFS_SECRET_KEY=awsem`.
 
 ## Lambda
 

@@ -28,7 +28,7 @@ pub async fn listen(state: AppState) {
             }) => {
                 let payload = build_s3_payload(&bucket, &key);
 
-                if target_type == "lambda" {
+                if target_type == "Lambda" {
                     let name = {
                         let c = match state.db.lock() {
                             Ok(c) => c,

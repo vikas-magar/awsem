@@ -17,5 +17,4 @@ k8s-openapi = { version = "0.24", features = ["v1_32"] }
 actix-web = "4"
 clap = { version = "4", features = ["derive"] }
 toml = "0.8"
-dirs = "6"
 uuid = { version = "1", features = ["v4"] }

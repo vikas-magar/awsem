@@ -132,6 +132,8 @@ impl AppConfig {
     pub fn resolved_spark_memory(&self) -> &str { self.spark_memory.as_deref().unwrap_or("512Mi") }
     pub fn resolved_lambda_cpu(&self) -> &str { self.lambda_cpu.as_deref().unwrap_or("250m") }
     pub fn resolved_lambda_memory(&self) -> &str { self.lambda_memory.as_deref().unwrap_or("256Mi") }
+    pub fn resolved_kubeconfig(&self) -> Option<&str> { self.kubeconfig.as_deref() }
+    pub fn resolved_lambda_runtime_image(&self) -> Option<&str> { self.lambda_runtime_image.as_deref() }
     pub fn resolved_s3_endpoint(&self) -> Option<&str> { self.s3_endpoint.as_deref().filter(|s| !s.is_empty()) }
     pub fn resolved_emr_poll_interval(&self) -> u64 { self.emr_poll_interval.unwrap_or(15) }
     pub fn resolved_rustfs_access_key(&self) -> &str { self.rustfs_access_key.as_deref().unwrap_or("awsem") }

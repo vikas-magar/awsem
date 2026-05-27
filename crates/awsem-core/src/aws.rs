@@ -5,7 +5,6 @@ pub struct AwsConfig {
     pub access_key_id: String,
     pub secret_access_key: String,
     pub default_pool_id: String,
-    pub jwt_issuer_url: String,
 }
 
 impl AwsConfig {
@@ -16,8 +15,7 @@ impl AwsConfig {
             account_id: account_id.to_string(),
             access_key_id: access_key_id.to_string(),
             secret_access_key: secret_access_key.to_string(),
-            default_pool_id: pool.clone(),
-            jwt_issuer_url: format!("https://cognito-idp.{region}.amazonaws.com/{pool}"),
+            default_pool_id: pool,
         }
     }
 

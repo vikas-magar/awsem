@@ -45,7 +45,7 @@ async fn main() -> anyhow::Result<()> {
     let cognito_state = awsem_cognito::AppState { db: conn.clone(), jwt_secret: config.resolved_jwt_secret(), aws: aws.clone() };
     let secrets_state = awsem_secretsmanager::AppState { db: conn.clone(), aws: aws.clone() };
     let emr_state = awsem_emr::AppState { db: conn.clone(), event_bus: event_bus.clone(), k8s_client: kube_client.clone(), namespace: ns.clone(), emr_spark_image: config.resolved_emr_spark_image().to_string(), awsem_endpoint, aws: aws.clone(), rustfs_access_key: config.resolved_rustfs_access_key().to_string(), rustfs_secret_key: config.resolved_rustfs_secret_key().to_string() };
-    let lambda_state = awsem_lambda::AppState { db: conn.clone(), event_bus: event_bus.clone(), data_dir: config.resolved_data_dir().map(String::from), kube_client: kube_client.clone(), namespace: ns.clone(), lambda_runtime_image: config.lambda_runtime_image.clone(), aws: aws.clone() };
+    let lambda_state = awsem_lambda::AppState { db: conn.clone(), event_bus: event_bus.clone(), data_dir: config.resolved_data_dir().map(String::from), kube_client: kube_client.clone(), namespace: ns.clone(), lambda_runtime_image: config.resolved_lambda_runtime_image().map(String::from), aws: aws.clone() };
 
     if !config.resolved_no_emr() {
         let (db, kc, url, client, bus, a) = (conn.clone(), kube_client.clone(), s3_endpoint.clone(), http_client.clone(), event_bus.clone(), aws.clone());

@@ -16,6 +16,7 @@ mod form;
 mod detail;
 mod upload_state;
 mod upload;
+mod overlay;
 mod dash_handler;
 mod browse_handler;
 mod app_actions;

@@ -11,10 +11,10 @@ pub async fn handle_dashboard(app: &mut App, c: KeyCode) {
         KeyCode::Right if app.active_panel < 6 => { app.set_panel_scroll(app.active_panel, app.active_scroll()); app.active_panel += 1; }
         KeyCode::Enter if app.active_panel == 0 => {
             if let Some(b) = app.s3_buckets.get(app.active_cursor()) {
-                        let items = crate::fetchers::s3_objects(&app.aws, &b.name, "").await;
-                        app.browser_bucket = b.name.clone(); app.browser_path = String::new(); app.browser_items = items.clone();
-                        app.browser_cursor = 0; app.browser_scroll = 0; app.browser_focus = 0; app.browser_sort_col = 0; app.browser_sort_desc = false;
-                        app.mode = ViewMode::BucketBrowser;
+                let items = crate::fetchers::s3_objects(&app.aws, &b.name, "").await;
+                app.browser_bucket = b.name.clone(); app.browser_path = String::new(); app.browser_items = items.clone();
+                app.browser_cursor = 0; app.browser_scroll = 0; app.browser_focus = 0; app.browser_sort_desc = false;
+                app.mode = ViewMode::BucketBrowser;
             }
         }
         KeyCode::Enter if app.active_panel == 1 => {
@@ -66,6 +66,9 @@ pub async fn handle_dashboard(app: &mut App, c: KeyCode) {
         }
         _ => {}
     }
+    let m = 10usize;
+    let (c, s) = (app.active_cursor(), &mut app.panel_scrolls[app.active_panel]);
+    if c >= *s + m { *s = c.saturating_sub(m / 2); } else if c < *s { *s = c; }
 }
 
 pub async fn handle_dashboard_chars(app: &mut App, c: char) {

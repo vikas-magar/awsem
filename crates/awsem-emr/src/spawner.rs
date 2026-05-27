@@ -57,9 +57,11 @@ pub async fn submit_k8s_job(
     emr_spark_image: &str,
     job_driver: &serde_json::Map<String, Value>,
     awsem_endpoint: &str,
+    rustfs_access_key: &str,
+    rustfs_secret_key: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let image = emr_spark_image;
-    let spark_args = spark_params::build_args(job_driver, image, namespace, job_id);
+    let spark_args = spark_params::build_args(job_driver, image, namespace, job_id, rustfs_access_key, rustfs_secret_key);
     let job_obj: Job = serde_json::from_value(json!({
         "apiVersion": "batch/v1",
         "kind": "Job",

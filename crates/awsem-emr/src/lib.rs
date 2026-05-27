@@ -23,6 +23,8 @@ pub struct AppState {
     pub emr_spark_image: String,
     pub awsem_endpoint: String,
     pub aws: awsem_core::aws::AwsConfig,
+    pub rustfs_access_key: String,
+    pub rustfs_secret_key: String,
 }
 
 pub struct EmrClassicGuard;

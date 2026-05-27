@@ -9,14 +9,15 @@ pub struct AwsConfig {
 }
 
 impl AwsConfig {
-    pub fn new(region: &str, account_id: &str, access_key_id: &str, secret_access_key: &str) -> Self {
+    pub fn new(region: &str, account_id: &str, access_key_id: &str, secret_access_key: &str, default_pool_id: &str) -> Self {
+        let pool = if default_pool_id.is_empty() { format!("{region}_default") } else { default_pool_id.to_string() };
         Self {
             region: region.to_string(),
             account_id: account_id.to_string(),
             access_key_id: access_key_id.to_string(),
             secret_access_key: secret_access_key.to_string(),
-            default_pool_id: format!("{region}_default"),
-            jwt_issuer_url: format!("https://cognito-idp.{region}.amazonaws.com/{region}_default"),
+            default_pool_id: pool.clone(),
+            jwt_issuer_url: format!("https://cognito-idp.{region}.amazonaws.com/{pool}"),
         }
     }
 

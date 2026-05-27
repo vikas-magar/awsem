@@ -6,6 +6,7 @@ use ratatui::Frame;
 
 use crate::table::{self, Col};
 use crate::theme;
+use crate::app::App;
 
 pub struct PanelConfig<'a> {
     pub title: &'static str,
@@ -45,4 +46,39 @@ pub fn render(frame: &mut Frame, area: Rect, cfg: &PanelConfig) {
 
     let table_area = Rect::new(inner.x, y, inner.width, inner.height.saturating_sub(y - inner.y));
     table::render(frame, table_area, cfg.cols, &cfg.rows, cfg.selected, cfg.scroll, "", "");
+}
+
+type ColSpec<'a> = (&'a str, f32, fn(&str, usize) -> String);
+
+pub fn panel_cols(avail: u16, specs: &[ColSpec]) -> Vec<Col> {
+    let a = avail.saturating_sub(2) as usize;
+    let tr: f32 = specs.iter().map(|(_, r, _)| r).sum();
+    let sp = 2 * (specs.len().saturating_sub(1));
+    let mut used = 0usize;
+    specs.iter().enumerate().map(|(i, (_label, ratio, align))| {
+        let w = if i == specs.len() - 1 { a.saturating_sub(used + sp) } else { (a as f32 * ratio / tr).max(6.0) as usize };
+        used += w + 2;
+        Col { width: w, align: *align }
+    }).collect()
+}
+
+pub fn get_dashboard_hints(active: usize) -> &'static str { match active {
+    0 => "↑↓ · ↩ browse · c create · d delete · u upload · r refresh",
+    1 => "↑↓ · s submit · d delete · r refresh", 2 => "↑↓ · c create · d delete · r refresh",
+    3 => "↑↓ · c create · e edit · d delete · r refresh", 4 => "↑↓ · i invoke · d delete · r refresh",
+    5 => "↑↓ · f filter · r refresh", _ => "↑↓ · r refresh · q quit",
+    }
+}
+
+#[allow(clippy::too_many_arguments, clippy::redundant_closure)]
+pub fn render_panel<T, F>(frame: &mut Frame, area: Rect, app: &App, idx: usize, global_filter: &str, title: &'static str, cols: &[Col], items: &[T], mapper: F, extra: &[(&str, usize)])
+where F: Fn(&T) -> Vec<String> {
+    let f = if idx == app.active_panel { global_filter } else { "" };
+    let mut summary: Vec<(String, String)> = vec![("Total".into(), items.len().to_string())];
+    for (k, v) in extra { summary.push((k.to_string(), v.to_string())); }
+    let rows: Vec<Vec<String>> = items.iter().filter(|x| f.is_empty() || mapper(x).join(" ").contains(f)).map(|x| mapper(x)).collect();
+    render(frame, area, &PanelConfig {
+        title, summary, cols, rows, selected: app.panel_cursor(idx), scroll: app.panel_scroll(idx),
+        filter: f.to_string(), focus: app.active_panel == idx,
+    });
 }

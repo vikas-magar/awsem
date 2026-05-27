@@ -18,13 +18,14 @@ fn fmt_aws_date(d: Option<&aws_sdk_s3::primitives::DateTime>) -> String {
     }).unwrap_or_default()
 }
 
-pub async fn s3_buckets(aws: &AwsClients) -> Vec<S3Bucket> {
-    aws.s3.list_buckets().send().await.ok()
+pub async fn s3_buckets(aws: &AwsClients) -> Result<Vec<S3Bucket>, String> {
+    aws.s3.list_buckets().send().await
         .map(|o| o.buckets().iter().map(|b| S3Bucket {
             name: fmt0(b.name()),
             created: b.creation_date().map(|d| d.to_string()).unwrap_or_default(),
             objects: "—".into(), size: "—".into(),
-        }).collect()).unwrap_or_default()
+        }).collect())
+        .map_err(|e| format!("S3 ListBuckets failed: {e}"))
 }
 
 pub async fn s3_objects(aws: &AwsClients, bucket: &str, prefix: &str) -> Vec<S3Object> {

@@ -77,9 +77,11 @@ impl App {
             fetchers::secrets(&self.aws), fetchers::lambda_funcs(&self.aws),
             fetchers::emr_vcs(&self.aws),
         );
-        let s3_ok = !b.is_empty();
-        self.s3_buckets = b; self.cognito_users = u; self.secrets = s; self.lambda_funcs = f; self.emr_vcs = v;
-        if !s3_ok { self.error = Some("S3 proxy unavailable — check RustFS/K8s".into()); }
+        match b {
+            Ok(buckets) => self.s3_buckets = buckets,
+            Err(e) => self.error = Some(e),
+        }
+        self.cognito_users = u; self.secrets = s; self.lambda_funcs = f; self.emr_vcs = v;
         if self.mode == ViewMode::Dashboard && !self.log_file.is_empty() { self.logs = fetchers::read_log_file(&self.log_file, &self.logs_filter).await; }
         let p = self.active_panel;
         let len = self.panel_len(p);

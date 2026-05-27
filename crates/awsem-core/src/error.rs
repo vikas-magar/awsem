@@ -62,4 +62,16 @@ impl AwsemError {
         };
         HttpResponse::build(self.status_code()).json(self.aws_json(t))
     }
+
+    pub fn emr_response(&self) -> HttpResponse {
+        let t = match self {
+            Self::NotImplemented(_) => "UnknownOperationException",
+            Self::NotFound(_) => "ResourceNotFoundException",
+            Self::InvalidRequest(_) => "ValidationException",
+            Self::AlreadyExists(_) => "ValidationException",
+            Self::Conflict(_) => "ValidationException",
+            _ => "InternalServerError",
+        };
+        HttpResponse::build(self.status_code()).json(self.aws_json(t))
+    }
 }

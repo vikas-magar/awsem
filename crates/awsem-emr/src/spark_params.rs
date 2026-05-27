@@ -5,6 +5,8 @@ pub fn build_args(
     image: &str,
     namespace: &str,
     job_id: &str,
+    rustfs_access_key: &str,
+    rustfs_secret_key: &str,
 ) -> Vec<String> {
     let mut args: Vec<String> = Vec::new();
 
@@ -52,9 +54,9 @@ pub fn build_args(
     args.push("--conf".into());
     args.push("spark.hadoop.fs.s3a.endpoint=http://rustfs-svc:9000".into());
     args.push("--conf".into());
-    args.push("spark.hadoop.fs.s3a.access.key=awsem".into());
+    args.push(format!("spark.hadoop.fs.s3a.access.key={rustfs_access_key}"));
     args.push("--conf".into());
-    args.push("spark.hadoop.fs.s3a.secret.key=awsem".into());
+    args.push(format!("spark.hadoop.fs.s3a.secret.key={rustfs_secret_key}"));
     args.push("--conf".into());
     args.push("spark.hadoop.fs.s3a.path.style.access=true".into());
     args.push("--conf".into());

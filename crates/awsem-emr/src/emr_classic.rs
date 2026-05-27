@@ -24,7 +24,7 @@ pub async fn handle(state: web::Data<AppState>, req: HttpRequest, body: bytes::B
         "ElasticMapReduce.ListSteps" => emr_classic_steps::list_steps(state, body).await,
         "ElasticMapReduce.DescribeStep" => emr_classic_steps::describe_step(state, body).await,
         "ElasticMapReduce.SetTerminationProtection" | "ElasticMapReduce.SetVisibleToAllUsers" => HttpResponse::Ok().json(json!({})),
-        _ => awsem_core::error::AwsemError::NotImplemented(target.into()).to_response(),
+        _ => awsem_core::error::AwsemError::NotImplemented(target.into()).emr_response(),
     }
 }
 
@@ -40,7 +40,7 @@ async fn run_job_flow(state: web::Data<AppState>, body: bytes::Bytes) -> HttpRes
         let arn = state.aws.emr_vc_arn(&vc_id);
         if c.execute("INSERT INTO emr_virtual_clusters (id, name, arn, namespace, state) VALUES (?1, ?2, ?3, ?4, 'RUNNING')", params![vc_id, name, arn, state.namespace]).is_err()
             || c.execute("INSERT INTO emr_classic_clusters (job_flow_id, name, virtual_cluster_id, state) VALUES (?1, ?2, ?3, 'RUNNING')", params![job_flow, name, vc_id]).is_err()
-        { return awsem_core::error::AwsemError::AlreadyExists(job_flow.clone()).to_response(); }
+        { return awsem_core::error::AwsemError::AlreadyExists(job_flow.clone()).emr_response(); }
     }
     if let Some(steps) = input.get("Steps").and_then(|v| v.as_array()) {
         for step in steps {
@@ -58,12 +58,12 @@ async fn run_job_flow(state: web::Data<AppState>, body: bytes::Bytes) -> HttpRes
 async fn list_clusters(state: web::Data<AppState>) -> HttpResponse {
     let c = awsem_core::lock_db!(state);
     let mut stmt = match c.prepare("SELECT job_flow_id, name, state, created_at FROM emr_classic_clusters WHERE state != 'TERMINATED' ORDER BY created_at DESC") {
-        Ok(s) => s, Err(e) => return awsem_core::error::AwsemError::Internal(e.to_string()).to_response(),
+        Ok(s) => s, Err(e) => return awsem_core::error::AwsemError::Internal(e.to_string()).emr_response(),
     };
     let rows = match stmt.query_map([], |row| Ok(json!({"Id": row.get::<_,String>(0)?, "Name": row.get::<_,String>(1)?, "Status": {"State": row.get::<_,String>(2)?, "Timeline": {"CreationDateTime": to_rfc3339(&row.get::<_,String>(3)?)}}})))
-    { Ok(r) => r, Err(e) => return awsem_core::error::AwsemError::Internal(e.to_string()).to_response() };
+    { Ok(r) => r, Err(e) => return awsem_core::error::AwsemError::Internal(e.to_string()).emr_response() };
     let mut clusters = Vec::new();
-    for row in rows { match row { Ok(v) => clusters.push(v), Err(e) => return awsem_core::error::AwsemError::Internal(e.to_string()).to_response() } }
+    for row in rows { match row { Ok(v) => clusters.push(v), Err(e) => return awsem_core::error::AwsemError::Internal(e.to_string()).emr_response() } }
     HttpResponse::Ok().json(json!({"Clusters": clusters}))
 }
 
@@ -75,7 +75,7 @@ async fn describe_cluster(state: web::Data<AppState>, body: bytes::Bytes) -> Htt
         "SELECT name, state, created_at FROM emr_classic_clusters WHERE job_flow_id = ?1",
         params![jf],
         |row| Ok(json!({"Id": jf, "Name": row.get::<_,String>(0)?, "Status": {"State": row.get::<_,String>(1)?, "Timeline": {"CreationDateTime": to_rfc3339(&row.get::<_,String>(2)?)}}, "NormalizedInstanceHours": "0", "ClusterArn": state.aws.emr_cluster_arn(jf)})),
-    ) { Ok(c) => HttpResponse::Ok().json(json!({"Cluster": c})), Err(_) => awsem_core::error::AwsemError::NotFound(jf.into()).to_response() }
+    ) { Ok(c) => HttpResponse::Ok().json(json!({"Cluster": c})), Err(_) => awsem_core::error::AwsemError::NotFound(jf.into()).emr_response() }
 }
 
 async fn terminate_job_flows(state: web::Data<AppState>, body: bytes::Bytes) -> HttpResponse {

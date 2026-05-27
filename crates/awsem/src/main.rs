@@ -25,7 +25,7 @@ async fn main() -> anyhow::Result<()> {
     let (event_bus, _rx) = broadcast::channel(256);
 
     let s3_endpoint = if !config.resolved_no_s3() {
-        if let Some(ref ep) = config.s3_endpoint { ep.clone() }
+        if let Some(ep) = config.resolved_s3_endpoint() { ep.to_string() }
         else if let Some(ref client) = kube_client {
             let s3_cfg = awsem_s3::RustFsConfig::new(config.resolved_k8s_namespace(), config.resolved_rustfs_image(), config.resolved_rustfs_pvc_size(), config.resolved_rustfs_access_key(), config.resolved_rustfs_secret_key());
             awsem_s3::deploy::ensure(client, &s3_cfg).await.map_err(logging::map_err)?
@@ -42,9 +42,9 @@ async fn main() -> anyhow::Result<()> {
     let aws = config.resolved_aws_config();
 
     let s3_state = awsem_s3::S3State { rustfs_url: s3_endpoint.clone(), http_client: s3_client, db: conn.clone(), event_bus: event_bus.clone() };
-    let cognito_state = awsem_cognito::AppState { db: conn.clone(), jwt_secret: config.resolved_jwt_secret().to_string(), aws: aws.clone() };
+    let cognito_state = awsem_cognito::AppState { db: conn.clone(), jwt_secret: config.resolved_jwt_secret(), aws: aws.clone() };
     let secrets_state = awsem_secretsmanager::AppState { db: conn.clone(), aws: aws.clone() };
-    let emr_state = awsem_emr::AppState { db: conn.clone(), event_bus: event_bus.clone(), k8s_client: kube_client.clone(), namespace: ns.clone(), emr_spark_image: config.resolved_emr_spark_image().to_string(), awsem_endpoint, aws: aws.clone() };
+    let emr_state = awsem_emr::AppState { db: conn.clone(), event_bus: event_bus.clone(), k8s_client: kube_client.clone(), namespace: ns.clone(), emr_spark_image: config.resolved_emr_spark_image().to_string(), awsem_endpoint, aws: aws.clone(), rustfs_access_key: config.resolved_rustfs_access_key().to_string(), rustfs_secret_key: config.resolved_rustfs_secret_key().to_string() };
     let lambda_state = awsem_lambda::AppState { db: conn.clone(), event_bus: event_bus.clone(), data_dir: config.resolved_data_dir().map(String::from), kube_client: kube_client.clone(), namespace: ns.clone(), lambda_runtime_image: config.lambda_runtime_image.clone(), aws: aws.clone() };
 
     if !config.resolved_no_emr() {
@@ -53,8 +53,10 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let admin_state = awsem_care::AdminState { db: conn.clone(), log_file: log_file.clone(), aws: aws.clone() };
-    let lambda_trigger_state = lambda_state.clone();
-    tokio::spawn(async move { awsem_lambda::trigger::listen(lambda_trigger_state).await; });
+    if !config.resolved_no_lambda() {
+        let lambda_trigger_state = lambda_state.clone();
+        tokio::spawn(async move { awsem_lambda::trigger::listen(lambda_trigger_state).await; });
+    }
 
     let server = HttpServer::new(move || {
         App::new()

@@ -17,7 +17,7 @@ pub async fn list(state: web::Data<AppState>, path: web::Path<String>) -> HttpRe
         "SELECT id, name, arn, virtual_cluster_id, state, created_at FROM emr_job_runs WHERE virtual_cluster_id = ?1 ORDER BY created_at DESC"
     ) {
         Ok(s) => s,
-        Err(e) => return awsem_core::error::AwsemError::Internal(e.to_string()).to_response(),
+        Err(e) => return awsem_core::error::AwsemError::Internal(e.to_string()).emr_response(),
     };
     let rows = match stmt.query_map(params![vc_id], |row| {
         Ok(json!({
@@ -30,13 +30,13 @@ pub async fn list(state: web::Data<AppState>, path: web::Path<String>) -> HttpRe
         }))
     }) {
         Ok(r) => r,
-        Err(e) => return awsem_core::error::AwsemError::Internal(e.to_string()).to_response(),
+        Err(e) => return awsem_core::error::AwsemError::Internal(e.to_string()).emr_response(),
     };
     let mut runs = Vec::new();
     for row in rows {
         match row {
             Ok(r) => runs.push(r),
-            Err(e) => return awsem_core::error::AwsemError::Internal(e.to_string()).to_response(),
+            Err(e) => return awsem_core::error::AwsemError::Internal(e.to_string()).emr_response(),
         }
     }
     HttpResponse::Ok().json(json!({"jobRuns": runs}))
@@ -64,7 +64,7 @@ pub async fn describe(
         })),
     ) {
         Ok(run) => HttpResponse::Ok().json(json!({"jobRun": run})),
-        Err(_) => awsem_core::error::AwsemError::NotFound(jr_id).to_response(),
+        Err(_) => awsem_core::error::AwsemError::NotFound(jr_id).emr_response(),
     }
 }
 
@@ -77,7 +77,7 @@ pub async fn cancel(state: web::Data<AppState>, path: web::Path<(String, String)
     )
     .is_err()
     {
-        return awsem_core::error::AwsemError::NotFound(jr_id).to_response();
+        return awsem_core::error::AwsemError::NotFound(jr_id).emr_response();
     }
     HttpResponse::Ok().json(json!({"id": jr_id, "virtualClusterId": vc_id}))
 }

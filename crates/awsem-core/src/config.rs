@@ -119,7 +119,7 @@ impl AppConfig {
     pub fn resolved_data_dir(&self) -> Option<&str> { self.data_dir.as_deref() }
     pub fn resolved_log_dir(&self) -> &str { self.log_dir.as_deref().unwrap_or("./logs") }
     pub fn resolved_log_level(&self) -> &str { self.log_level.as_deref().unwrap_or("info") }
-    pub fn resolved_jwt_secret(&self) -> &str { self.jwt_secret.as_deref().unwrap_or("awsem-dev-secret") }
+    pub fn resolved_jwt_secret(&self) -> String { self.jwt_secret.clone().unwrap_or_else(crate::defaults::default_jwt_secret) }
     pub fn resolved_host_ip(&self) -> &str { self.host_ip.as_deref().unwrap_or("127.0.0.1") }
     pub fn resolved_rustfs_image(&self) -> &str { self.rustfs_image.as_deref().unwrap_or("rustfs/rustfs:latest") }
     pub fn resolved_emr_spark_image(&self) -> &str { self.emr_spark_image.as_deref().unwrap_or("spark-s3a:latest") }
@@ -132,10 +132,11 @@ impl AppConfig {
     pub fn resolved_spark_memory(&self) -> &str { self.spark_memory.as_deref().unwrap_or("512Mi") }
     pub fn resolved_lambda_cpu(&self) -> &str { self.lambda_cpu.as_deref().unwrap_or("250m") }
     pub fn resolved_lambda_memory(&self) -> &str { self.lambda_memory.as_deref().unwrap_or("256Mi") }
+    pub fn resolved_s3_endpoint(&self) -> Option<&str> { self.s3_endpoint.as_deref().filter(|s| !s.is_empty()) }
     pub fn resolved_emr_poll_interval(&self) -> u64 { self.emr_poll_interval.unwrap_or(15) }
     pub fn resolved_rustfs_access_key(&self) -> &str { self.rustfs_access_key.as_deref().unwrap_or("awsem") }
     pub fn resolved_rustfs_secret_key(&self) -> &str { self.rustfs_secret_key.as_deref().unwrap_or("awsem") }
     pub fn resolved_aws_config(&self) -> AwsConfig {
-        AwsConfig::new(self.resolved_region(), self.resolved_account_id(), self.resolved_aws_access_key_id(), self.resolved_aws_secret_access_key())
+        AwsConfig::new(self.resolved_region(), self.resolved_account_id(), self.resolved_aws_access_key_id(), self.resolved_aws_secret_access_key(), &self.resolved_default_pool_id())
     }
 }

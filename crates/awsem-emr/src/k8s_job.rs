@@ -24,7 +24,7 @@ pub async fn start_job_run(
     let input: Value = match serde_json::from_slice(&body) {
         Ok(v) => v,
         Err(e) => {
-            return awsem_core::error::AwsemError::InvalidRequest(e.to_string()).to_response();
+            return awsem_core::error::AwsemError::InvalidRequest(e.to_string()).emr_response();
         }
     };
     let name = input.get("name").and_then(|v| v.as_str()).unwrap_or("emr-job");
@@ -39,13 +39,13 @@ pub async fn start_job_run(
             "INSERT INTO emr_job_runs (id, name, arn, virtual_cluster_id, job_driver_json, state, kubernetes_job_name) VALUES (?1, ?2, ?3, ?4, ?5, 'SUBMITTED', ?6)",
             params![id, name, arn, vc_id, job_driver_json, job_name],
         ) {
-            return awsem_core::error::AwsemError::AlreadyExists(e.to_string()).to_response();
+            return awsem_core::error::AwsemError::AlreadyExists(e.to_string()).emr_response();
         }
     }
     let mut job_state = "RUNNING";
     if let (Some(client), Some((vc_ns, _))) = (&state.k8s_client, get_vc_info(&state, &vc_id)) {
         spawner::ensure_rbac(client, &vc_ns).await;
-        if let Err(e) = spawner::submit_k8s_job(client, &vc_ns, &id, &job_name, &state.emr_spark_image, &job_driver, &state.awsem_endpoint).await {
+        if let Err(e) = spawner::submit_k8s_job(client, &vc_ns, &id, &job_name, &state.emr_spark_image, &job_driver, &state.awsem_endpoint, &state.rustfs_access_key, &state.rustfs_secret_key).await {
             tracing::error!("Failed to submit K8s job: {e}");
             job_state = "FAILED";
         }

@@ -7,7 +7,7 @@ pub async fn create(state: web::Data<AppState>, body: bytes::Bytes) -> HttpRespo
     let input: Value = match serde_json::from_slice(&body) {
         Ok(v) => v,
         Err(e) => {
-            return awsem_core::error::AwsemError::InvalidRequest(e.to_string()).to_response();
+            return awsem_core::error::AwsemError::InvalidRequest(e.to_string()).emr_response();
         }
     };
     let name = input.get("name").and_then(|v| v.as_str()).unwrap_or("");
@@ -22,7 +22,7 @@ pub async fn create(state: web::Data<AppState>, body: bytes::Bytes) -> HttpRespo
         "INSERT INTO emr_virtual_clusters (id, name, arn, namespace, state) VALUES (?1, ?2, ?3, ?4, 'RUNNING')",
         params![id, name, arn, namespace],
     ) {
-        return awsem_core::error::AwsemError::AlreadyExists(e.to_string()).to_response();
+        return awsem_core::error::AwsemError::AlreadyExists(e.to_string()).emr_response();
     }
     HttpResponse::Ok().json(json!({
         "id": id, "arn": arn, "name": name, "state": "RUNNING",
@@ -40,7 +40,7 @@ pub async fn list(state: web::Data<AppState>) -> HttpResponse {
         "SELECT id, name, arn, namespace, state, created_at FROM emr_virtual_clusters WHERE state != 'TERMINATED' ORDER BY created_at DESC"
     ) {
         Ok(s) => s,
-        Err(e) => return awsem_core::error::AwsemError::Internal(e.to_string()).to_response(),
+        Err(e) => return awsem_core::error::AwsemError::Internal(e.to_string()).emr_response(),
     };
     let rows = match stmt.query_map([], |row| {
         Ok(json!({
@@ -52,13 +52,13 @@ pub async fn list(state: web::Data<AppState>) -> HttpResponse {
         }))
     }) {
         Ok(r) => r,
-        Err(e) => return awsem_core::error::AwsemError::Internal(e.to_string()).to_response(),
+        Err(e) => return awsem_core::error::AwsemError::Internal(e.to_string()).emr_response(),
     };
     let mut clusters: Vec<Value> = Vec::new();
     for row in rows {
         match row {
             Ok(v) => clusters.push(v),
-            Err(e) => return awsem_core::error::AwsemError::Internal(e.to_string()).to_response(),
+            Err(e) => return awsem_core::error::AwsemError::Internal(e.to_string()).emr_response(),
         }
     }
     HttpResponse::Ok().json(json!({"virtualClusters": clusters}))
@@ -74,7 +74,7 @@ pub async fn delete(state: web::Data<AppState>, path: web::Path<String>) -> Http
     .is_err()
     {
         return awsem_core::error::AwsemError::NotFound(format!("Cluster {id} not found"))
-            .to_response();
+            .emr_response();
     }
     HttpResponse::Ok().json(json!({"id": id}))
 }

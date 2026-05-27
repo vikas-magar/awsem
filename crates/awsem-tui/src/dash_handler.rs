@@ -71,10 +71,10 @@ pub async fn handle_dashboard(app: &mut App, c: KeyCode) {
 pub async fn handle_dashboard_chars(app: &mut App, c: char) {
     match c {
         '1'..='6' => { let i = (c as u8 - b'1') as usize; if i <= 5 { app.active_panel = i; } }
-        'S' => if matches!(app.server_status, ServerStatus::Stopped | ServerStatus::Failed(_)) {
+        'S' => if matches!(app.server_status, ServerStatus::Stopped | ServerStatus::Failed) {
             app.server_status = ServerStatus::Starting;
             app.start_time = Some(std::time::Instant::now());
-            if app.server.start().await.is_err() { app.server_status = ServerStatus::Failed("start failed".into()); app.start_time = None; }
+            if app.server.start().await.is_err() { app.server_status = ServerStatus::Failed; app.start_time = None; }
         } else { app.server.stop().await; app.server_status = ServerStatus::Stopped; app.start_time = None; app.server_started = None; }
         'r' | 'R' => app.refresh_all().await,
         'c' if app.active_panel == 0 => app.open_form(FormAction::CreateBucket),

@@ -12,7 +12,7 @@ pub fn render(frame: &mut Frame, area: Rect, endpoint: &str, status: &ServerStat
         ServerStatus::Running => ("●", theme::SUCCESS),
         ServerStatus::Stopped => ("○", theme::MUTED),
         ServerStatus::Starting => ("◌", theme::WARN),
-        ServerStatus::Failed(_) => ("✕", theme::ERROR),
+        ServerStatus::Failed => ("✕", theme::ERROR),
     };
     frame.render_widget(
         Paragraph::new(Line::from(vec![

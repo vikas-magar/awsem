@@ -8,7 +8,7 @@ pub enum ServerStatus {
     Stopped,
     Starting,
     Running,
-    Failed(String),
+    Failed,
 }
 
 pub struct ServerManager {

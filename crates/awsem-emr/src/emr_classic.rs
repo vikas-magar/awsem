@@ -31,7 +31,7 @@ pub async fn handle(state: web::Data<AppState>, req: HttpRequest, body: bytes::B
 async fn run_job_flow(state: web::Data<AppState>, body: bytes::Bytes) -> HttpResponse {
     let input: Value = serde_json::from_slice(&body).unwrap_or_default();
     let name = input.get("Name").and_then(|v| v.as_str()).unwrap_or("emr-cluster");
-    let release = input.get("ReleaseLabel").and_then(|v| v.as_str()).unwrap_or("emr-7.1.0-latest");
+    let _release = input.get("ReleaseLabel").and_then(|v| v.as_str()).unwrap_or("emr-7.1.0-latest");
     let keep_alive = input.pointer("/Instances/KeepJobFlowAliveWhenNoSteps").and_then(|v| v.as_bool()).unwrap_or(true);
     let vc_id = uuid::Uuid::new_v4().to_string();
     let job_flow = jfid();

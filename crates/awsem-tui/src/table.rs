@@ -4,7 +4,6 @@ use ratatui::{Frame, layout::Rect, style::Style};
 use crate::theme;
 
 pub struct Col {
-    pub label: &'static str,
     pub width: usize,
     pub align: fn(&str, usize) -> String,
 }
@@ -17,6 +16,7 @@ fn pad(s: &str, w: usize, align: fn(&str, usize) -> String) -> String {
 pub fn left(s: &str, w: usize) -> String { format!("{:<w$}", s) }
 pub fn right(s: &str, w: usize) -> String { format!("{:>w$}", s) }
 
+#[allow(clippy::too_many_arguments)]
 pub fn render(frame: &mut Frame, area: Rect, cols: &[Col], rows: &[Vec<String>], selected: usize, scroll: usize, _title: &str, _filter: &str) {
     let h = area.height as usize;
     let max_rows = h.saturating_sub(1);

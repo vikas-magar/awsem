@@ -27,7 +27,7 @@ pub enum FormAction {
     InvokeLambda(String), EmrSubmit(String), LogFilter,
 }
 
-pub enum FormResult { Submitted(FormAction), Cancelled, Continue }
+pub enum FormResult { Submitted, Cancelled, Continue }
 
 pub fn init(action: &FormAction) -> FormState {
     let (title, fields) = match action {
@@ -113,7 +113,7 @@ pub fn handle_key(form: &mut FormState, key: ratatui::crossterm::event::KeyCode)
                 }
             }
             form.error = None;
-            FormResult::Submitted(form.action.clone())
+            FormResult::Submitted
         }
         ratatui::crossterm::event::KeyCode::Tab | ratatui::crossterm::event::KeyCode::Down => {
             form.focus = (form.focus + 1) % form.fields.len();

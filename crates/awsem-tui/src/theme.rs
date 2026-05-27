@@ -23,13 +23,10 @@ pub fn frame() -> Style { Style::default().fg(FRAME) }
 pub fn header() -> Style { Style::default().fg(HEADER_FG).bg(HEADER_BG) }
 pub fn sidebar() -> Style { Style::default().fg(FG).bg(SIDEBAR_BG) }
 pub fn sidebar_active() -> Style { Style::default().fg(ACCENT).bg(SIDEBAR_BG) }
-pub fn accent() -> Style { Style::default().fg(ACCENT) }
 pub fn panel_border() -> Style { Style::default().fg(PANEL_BORDER) }
 pub fn selected() -> Style { Style::default().fg(SELECTED).bg(SELECTED_BG) }
 pub fn muted() -> Style { Style::default().fg(MUTED) }
-pub fn success() -> Style { Style::default().fg(SUCCESS) }
 pub fn warn() -> Style { Style::default().fg(WARN) }
 pub fn error() -> Style { Style::default().fg(ERROR) }
 pub fn info() -> Style { Style::default().fg(INFO) }
-pub fn purple() -> Style { Style::default().fg(PURPLE) }
 pub fn dim() -> Style { Style::default().fg(DIM) }

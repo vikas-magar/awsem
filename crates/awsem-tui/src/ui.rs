@@ -13,15 +13,17 @@ use crate::status;
 use crate::table::{Col, left, right};
 use crate::theme;
 
-fn panel_cols(avail: u16, specs: &[(&'static str, f32, fn(&str, usize) -> String)]) -> Vec<Col> {
+type ColSpec<'a> = (&'a str, f32, fn(&str, usize) -> String);
+
+fn panel_cols(avail: u16, specs: &[ColSpec]) -> Vec<Col> {
     let a = avail.saturating_sub(2) as usize;
     let tr: f32 = specs.iter().map(|(_, r, _)| r).sum();
     let sp = 2 * (specs.len().saturating_sub(1));
     let mut used = 0usize;
-    specs.iter().enumerate().map(|(i, (label, ratio, align))| {
+    specs.iter().enumerate().map(|(i, (_label, ratio, align))| {
         let w = if i == specs.len() - 1 { a.saturating_sub(used + sp) } else { (a as f32 * ratio / tr).max(6.0) as usize };
         used += w + 2;
-        Col { label, width: w, align: *align }
+        Col { width: w, align: *align }
     }).collect()
 }
 
@@ -111,6 +113,7 @@ fn get_dashboard_hints(active: usize) -> &'static str { match active {
     }
 }
 
+#[allow(clippy::too_many_arguments, clippy::redundant_closure)]
 fn render_panel<T, F>(frame: &mut Frame, area: Rect, app: &App, idx: usize, global_filter: &str, title: &'static str, cols: &[Col], items: &[T], mapper: F, extra: &[(&str, usize)])
 where F: Fn(&T) -> Vec<String> {
     let f = if idx == app.active_panel { global_filter } else { "" };

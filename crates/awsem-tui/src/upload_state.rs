@@ -17,7 +17,6 @@ impl UploadTransfer {
     }
     pub fn progress_pct(&self) -> u64 { self.progress.load(Ordering::Relaxed) }
     pub fn is_done(&self) -> bool { self.done.load(Ordering::Relaxed) }
-    pub fn error_msg(&self) -> Option<String> { self.error.lock().unwrap().take() }
 }
 
 pub struct UploadState {

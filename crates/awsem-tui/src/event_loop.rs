@@ -15,12 +15,10 @@ pub async fn run(terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>, app
         if matches!(app.server_status, ServerStatus::Starting) && app.health_checked.elapsed().as_secs() >= 2 {
             app.health_checked = Instant::now();
             if app.aws.check_health().await { app.server_status = ServerStatus::Running; app.server_started = Some(Instant::now()); app.start_time = None; app.refresh_all().await; }
-            else if app.start_time.is_some_and(|t| t.elapsed().as_secs() > 60) {
-                let s = app.server.stderr_snapshot();
-                let lines: Vec<&str> = s.lines().rev().take(5).collect();
-                app.server_status = ServerStatus::Failed(if lines.is_empty() { "startup timeout (60s)".into() } else { format!("timeout — last:\n{}", lines.into_iter().rev().collect::<Vec<_>>().join("\n")) });
+            else if app.start_time.is_some_and(|t| t.elapsed().as_secs() > 60) || app.server.check_exit().await.is_some() {
+                app.server_status = ServerStatus::Failed;
                 app.start_time = None;
-            } else if let Some((exit, stderr)) = app.server.check_exit().await { app.server_status = ServerStatus::Failed(format!("exited({exit}): {stderr}")); app.start_time = None; }
+            }
         }
 
         if matches!(app.server_status, ServerStatus::Running) && app.mode == ViewMode::Dashboard && last_auto.elapsed().as_secs() >= 5 { last_auto = Instant::now(); app.refresh_all().await; }
@@ -34,7 +32,7 @@ pub async fn run(terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>, app
 
         if app.mode == ViewMode::FormPopup {
             match crate::form::handle_key(&mut app.form, key.code) {
-                FormResult::Submitted(_) => app.submit_form().await,
+                FormResult::Submitted => app.submit_form().await,
                 FormResult::Cancelled => app.mode = ViewMode::Dashboard,
                 FormResult::Continue => {}
             }
@@ -67,7 +65,7 @@ pub async fn run(terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>, app
                 if c == 'q' || c == 'Q' { break; }
                 crate::dash_handler::handle_dashboard_chars(app, c).await;
             }
-            if let KeyCode::Backspace = key.code { if !app.global_filter.is_empty() { app.global_filter.pop(); } }
+            if let KeyCode::Backspace = key.code && !app.global_filter.is_empty() { app.global_filter.pop(); }
         } else if app.mode == ViewMode::BucketBrowser {
             crate::browse_handler::handle_browser(app, key.code).await;
         } else if app.mode == ViewMode::UploadMode {

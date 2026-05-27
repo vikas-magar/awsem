@@ -41,6 +41,7 @@ pub struct LambdaFn {
     pub memory: i32,
 }
 
+#[allow(dead_code)]
 pub struct EmrVc {
     pub id: String,
     pub name: String,
@@ -49,6 +50,7 @@ pub struct EmrVc {
     pub jobs: usize,
 }
 
+#[allow(dead_code)]
 pub struct EmrJobRun {
     pub id: String,
     pub name: String,

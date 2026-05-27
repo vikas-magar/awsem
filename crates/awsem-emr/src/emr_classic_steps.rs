@@ -24,7 +24,7 @@ pub async fn submit_step(state: &AppState, vc_id: &str, step: &Value, id: &str) 
     }) {
         spawner::ensure_rbac(client, &ns).await;
         let job_driver = jd.as_object().cloned().unwrap_or_default();
-        let _ = spawner::submit_k8s_job(client, &ns, &id, &job_name, &state.emr_spark_image, &job_driver, &state.awsem_endpoint).await;
+        let _ = spawner::submit_k8s_job(client, &ns, id, &job_name, &state.emr_spark_image, &job_driver, &state.awsem_endpoint).await;
     }
 }
 
@@ -79,5 +79,5 @@ pub async fn describe_step(state: web::Data<AppState>, body: bytes::Bytes) -> Ht
         "SELECT name, state, created_at, COALESCE(logs,''), COALESCE(exit_code,0) FROM emr_job_runs WHERE virtual_cluster_id = ?1 AND id LIKE ?2",
         params![vc_id, pattern],
         |row| Ok(json!({"Id": sid_raw, "Name": row.get::<_,String>(0)?, "Status": {"State": row.get::<_,String>(1)?, "Timeline": {"CreationDateTime": crate::emr_classic::to_rfc3339(&row.get::<_,String>(2)?)}}, "Logs": row.get::<_,String>(3)?, "ExitCode": row.get::<_,i64>(4)?})),
-    ) { Ok(s) => HttpResponse::Ok().json(json!({"Step": s})), Err(_) => return awsem_core::error::AwsemError::NotFound(sid_raw.into()).to_response() }
+    ) { Ok(s) => HttpResponse::Ok().json(json!({"Step": s})), Err(_) => awsem_core::error::AwsemError::NotFound(sid_raw.into()).to_response() }
 }

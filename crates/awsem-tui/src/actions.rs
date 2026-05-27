@@ -1,5 +1,4 @@
 use crate::aws_clients::AwsClients;
-use aws_sdk_s3::primitives::ByteStream;
 
 pub async fn create_bucket(aws: &AwsClients, name: &str) -> String {
     match aws.s3.create_bucket().bucket(name).send().await { Ok(_) => "Created".into(), Err(e) => format!("{e}") }
@@ -7,12 +6,6 @@ pub async fn create_bucket(aws: &AwsClients, name: &str) -> String {
 
 pub async fn delete_bucket(aws: &AwsClients, name: &str) -> String {
     match aws.s3.delete_bucket().bucket(name).send().await { Ok(_) => "Deleted".into(), Err(e) => format!("{e}") }
-}
-
-pub async fn upload_object(aws: &AwsClients, bucket: &str, key: &str, content: &[u8]) -> String {
-    match aws.s3.put_object().bucket(bucket).key(key).body(ByteStream::from(content.to_vec())).send().await {
-        Ok(_) => "Uploaded".into(), Err(e) => format!("{e}"),
-    }
 }
 
 pub async fn create_user(aws: &AwsClients, username: &str, email: &str, password: &str) -> String {

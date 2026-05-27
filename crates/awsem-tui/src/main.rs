@@ -14,7 +14,11 @@ mod actions;
 mod help;
 mod form;
 mod detail;
+mod upload_state;
 mod upload;
+mod dash_handler;
+mod browse_handler;
+mod app_actions;
 mod event_loop;
 mod ui;
 

@@ -17,7 +17,7 @@ pub fn render(frame: &mut Frame, area: Rect, endpoint: &str, status: &ServerStat
     frame.render_widget(
         Paragraph::new(Line::from(vec![
             Span::styled(" awsem DASHBOARD ", Style::default().fg(theme::FRAME)),
-            Span::styled(format!(" {} ", endpoint), theme::muted()),
+            Span::styled(format!(" {} ", endpoint), theme::info()),
             Span::styled(format!(" {} ", status_dot.0), Style::default().fg(status_dot.1)),
         ])),
         area,

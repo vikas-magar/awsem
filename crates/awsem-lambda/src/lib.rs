@@ -19,6 +19,7 @@ pub struct AppState {
     pub kube_client: Option<kube::Client>,
     pub namespace: String,
     pub lambda_runtime_image: Option<String>,
+    pub aws: awsem_core::aws::AwsConfig,
 }
 
 pub fn configure(cfg: &mut web::ServiceConfig) {

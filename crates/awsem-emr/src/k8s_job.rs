@@ -28,10 +28,9 @@ pub async fn start_job_run(
         }
     };
     let name = input.get("name").and_then(|v| v.as_str()).unwrap_or("emr-job");
-    let release = input.get("releaseLabel").and_then(|v| v.as_str()).unwrap_or("emr-7.1.0-latest");
     let job_driver = input.get("jobDriver").and_then(|v| v.as_object()).cloned().unwrap_or_default();
     let id = uuid::Uuid::new_v4().to_string();
-    let arn = format!("arn:aws:emr-containers:us-east-1:000000000000:/virtualclusters/{vc_id}/jobruns/{id}");
+    let arn = state.aws.emr_job_arn(&vc_id, &id);
     let job_driver_json = serde_json::to_string(&job_driver).unwrap_or_default();
     let job_name = format!("emr-job-{id}");
     {
@@ -46,7 +45,7 @@ pub async fn start_job_run(
     let mut job_state = "RUNNING";
     if let (Some(client), Some((vc_ns, _))) = (&state.k8s_client, get_vc_info(&state, &vc_id)) {
         spawner::ensure_rbac(client, &vc_ns).await;
-        if let Err(e) = spawner::submit_k8s_job(client, &vc_ns, &id, &job_name, release, state.emr_spark_image.as_deref(), &job_driver, &state.awsem_endpoint).await {
+        if let Err(e) = spawner::submit_k8s_job(client, &vc_ns, &id, &job_name, &state.emr_spark_image, &job_driver, &state.awsem_endpoint).await {
             tracing::error!("Failed to submit K8s job: {e}");
             job_state = "FAILED";
         }

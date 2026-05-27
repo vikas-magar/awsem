@@ -85,6 +85,15 @@ CREATE TABLE IF NOT EXISTS emr_job_runs (
     finished_at        TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS emr_classic_clusters (
+    job_flow_id       TEXT PRIMARY KEY,
+    name              TEXT NOT NULL,
+    virtual_cluster_id TEXT NOT NULL REFERENCES emr_virtual_clusters(id),
+    state             TEXT NOT NULL DEFAULT 'STARTING',
+    created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    terminated_at     TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS lambda_functions (
     name          TEXT PRIMARY KEY,
     arn           TEXT NOT NULL UNIQUE,

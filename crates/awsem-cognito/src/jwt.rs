@@ -17,13 +17,14 @@ pub fn create_tokens(
     sub: &str,
     username: &str,
     pool_id: &str,
+    region: &str,
     secret: &str,
 ) -> Result<(String, String, String), String> {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_secs() as usize;
-    let iss = format!("https://cognito-idp.us-east-1.amazonaws.com/{pool_id}");
+    let iss = format!("https://cognito-idp.{region}.amazonaws.com/{pool_id}");
     let base = |token_use: &str, exp_offset: usize| Claims {
         sub: sub.into(),
         username: username.into(),

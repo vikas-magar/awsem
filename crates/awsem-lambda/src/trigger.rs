@@ -51,7 +51,7 @@ pub async fn listen(state: AppState) {
                         Ok(c) => c,
                         Err(_) => continue,
                     };
-                    let event_arn = format!("arn:aws:s3:::{bucket}");
+                    let event_arn = state.aws.s3_bucket_arn(&bucket);
                     let mut stmt = match c.prepare(
                         "SELECT f.name
                          FROM lambda_event_source_mappings m

@@ -10,6 +10,7 @@ use awsem_core::db::DbConn;
 #[derive(Clone)]
 pub struct AppState {
     pub db: DbConn,
+    pub aws: awsem_core::aws::AwsConfig,
 }
 
 pub struct SecretsGuard;

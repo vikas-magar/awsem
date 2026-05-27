@@ -42,6 +42,10 @@ pub fn render(frame: &mut Frame, app: &App) {
             crate::upload::render(frame, split[1], &app.upload, &app.browser_bucket, &app.browser_path);
         }
         ViewMode::DetailPopup => crate::detail::render(frame, vert[1], &app.popup_title, &app.popup_lines),
+        ViewMode::ConfirmPopup => {
+            render_dashboard(frame, vert[1], app, app.active_panel, &app.global_filter);
+            render_confirm(frame, frame.area(), &app.confirm_item);
+        }
         ViewMode::FormPopup => {
             render_dashboard(frame, vert[1], app, app.active_panel, &app.global_filter);
             crate::form::render(frame, frame.area(), &app.form);
@@ -51,16 +55,16 @@ pub fn render(frame: &mut Frame, app: &App) {
     let age = app.last_refresh.elapsed().as_secs();
     let hints = match app.mode {
         ViewMode::Dashboard => get_dashboard_hints(app.active_panel),
-        ViewMode::BucketBrowser => "↑↓ · ↩ drill · ← back · u upload · r refresh · q quit",
-        ViewMode::UploadMode => "↑↓ nav · space select · → enter dir · ← parent · u/↩ upload · Esc close",
+        ViewMode::BucketBrowser => "↑↓ · ↩ drill · ← back · d dl · D dl all · s sort · u upload · r refresh · q quit",
+        ViewMode::UploadMode => "↑↓ · space select · Enter dir · u upload · ← parent · Esc close",
         ViewMode::DetailPopup => "Esc/Enter to dismiss",
+        ViewMode::ConfirmPopup => "Y/Enter confirm · N/Esc cancel",
         ViewMode::FormPopup => "Tab/↑↓ navigate · Enter submit · Esc cancel",
     };
-    status::render(frame, vert[2], hints, age);
+    status::render(frame, vert[2], hints, age, app.error.as_deref());
 
     if app.help_visible { crate::help::render(frame, frame.area()); }
     if let Some((title, msg)) = &app.result { render_result(frame, frame.area(), title, msg); }
-    if let Some(ref e) = app.error { render_result(frame, frame.area(), "Error", e); }
 }
 
 fn render_dashboard(frame: &mut Frame, area: Rect, app: &App, active: usize, filter: &str) {
@@ -71,8 +75,9 @@ fn render_dashboard(frame: &mut Frame, area: Rect, app: &App, active: usize, fil
         SidebarItem { key: '3', label: "Cognito", count: app.cognito_users.len() },
         SidebarItem { key: '4', label: "Secrets", count: app.secrets.len() },
         SidebarItem { key: '5', label: "Lambda", count: app.lambda_funcs.len() },
+        SidebarItem { key: '6', label: "Logs", count: app.logs.len() },
     ];
-    sidebar::render(frame, body[0], &sb_items, active.min(4));
+    sidebar::render(frame, body[0], &sb_items, active.min(5));
 
     let rows = Layout::vertical([Constraint::Ratio(1, 3), Constraint::Ratio(1, 3), Constraint::Ratio(1, 3)]).split(body[1]);
     let top = Layout::horizontal([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)]).split(rows[0]);
@@ -89,17 +94,20 @@ fn render_dashboard(frame: &mut Frame, area: Rect, app: &App, active: usize, fil
     let secc = panel_cols(mid[1].width, &[("Name", 5.0, left), ("Rot", 2.0, left), ("Status", 3.0, left)]);
     render_panel(frame, mid[1], app, 3, filter, " SECRETS MANAGER ", &secc,
         &app.secrets, |s: &crate::types::SecretEntry| vec![s.name.clone(), s.rotation.clone(), s.status.clone()], &[("Rotation Enabled", app.secrets.iter().filter(|s| s.rotation == "ENABLED").count())]);
-    let lamc = panel_cols(rows[2].width, &[("Name", 5.0, left), ("Runtime", 3.0, left), ("Timeout", 2.0, right)]);
-    render_panel(frame, rows[2], app, 4, filter, " LAMBDA FUNCTIONS ", &lamc,
+    let bottom = Layout::horizontal([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)]).split(rows[2]);
+    let lamc = panel_cols(bottom[0].width, &[("Name", 5.0, left), ("Runtime", 3.0, left), ("Timeout", 2.0, right)]);
+    render_panel(frame, bottom[0], app, 4, filter, " LAMBDA FUNCTIONS ", &lamc,
         &app.lambda_funcs, |f: &crate::types::LambdaFn| vec![f.name.clone(), f.runtime.clone(), format!("{}s", f.timeout)], &[]);
+    let logc = panel_cols(bottom[1].width, &[("Level", 2.0, left), ("Timestamp", 3.0, left), ("Message", 5.0, left)]);
+    render_panel(frame, bottom[1], app, 5, filter, " LOGS ", &logc,
+        &app.logs, |l| vec![l.level.clone(), l.timestamp.clone(), l.message.clone()], &[]);
 }
 
-fn get_dashboard_hints(active: usize) -> &'static str {
-    match active {
+fn get_dashboard_hints(active: usize) -> &'static str { match active {
         0 => "↑↓ · ↩ browse · c create · d delete · u upload · r refresh",
         1 => "↑↓ · s submit · d delete · r refresh", 2 => "↑↓ · c create · d delete · r refresh",
         3 => "↑↓ · c create · e edit · d delete · r refresh", 4 => "↑↓ · i invoke · d delete · r refresh",
-        _ => "↑↓ · r refresh · q quit",
+        5 => "↑↓ · f filter · r refresh", _ => "↑↓ · r refresh · q quit",
     }
 }
 
@@ -113,6 +121,16 @@ where F: Fn(&T) -> Vec<String> {
         title, summary, cols, rows, selected: app.panel_cursor(idx), scroll: app.panel_scroll(idx),
         filter: f.to_string(), focus: app.active_panel == idx,
     });
+}
+
+fn render_confirm(frame: &mut Frame, area: Rect, item: &str) {
+    let w = 60u16.min(area.width.saturating_sub(4));
+    let h = 7u16.min(area.height.saturating_sub(4));
+    let inner = Rect { x: (area.width - w) / 2, y: (area.height - h) / 2, width: w, height: h };
+    frame.render_widget(Clear, inner);
+    let lines = vec![Line::from(""), Line::from(Span::styled(format!(" Delete {}?", item), Style::default().fg(theme::FG))),
+        Line::from(""), Line::from(Span::styled(" [Y]es  [N]o", theme::muted()))];
+    frame.render_widget(Paragraph::new(lines).block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(theme::ACCENT))), inner);
 }
 
 fn render_result(frame: &mut Frame, area: Rect, title: &str, msg: &str) {

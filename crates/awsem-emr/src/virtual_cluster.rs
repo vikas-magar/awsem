@@ -16,7 +16,7 @@ pub async fn create(state: web::Data<AppState>, body: bytes::Bytes) -> HttpRespo
         .and_then(|v| v.as_str())
         .unwrap_or(&state.namespace);
     let id = uuid::Uuid::new_v4().to_string();
-    let arn = format!("arn:aws:emr-containers:us-east-1:000000000000:/virtualclusters/{id}");
+    let arn = state.aws.emr_vc_arn(&id);
     let c = awsem_core::lock_db!(state);
     if let Err(e) = c.execute(
         "INSERT INTO emr_virtual_clusters (id, name, arn, namespace, state) VALUES (?1, ?2, ?3, ?4, 'RUNNING')",

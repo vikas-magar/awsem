@@ -40,16 +40,19 @@ pub async fn s3_handler(
     state: web::Data<S3State>,
 ) -> HttpResponse {
     let target_url = format!("{}{}", state.rustfs_url, req.uri());
+    let method = req.method().clone();
 
-    let reqwest_method = to_reqwest_method(req.method());
-    let rb = state.http_client.request(reqwest_method, &target_url);
+    let rb = state.http_client.request(to_reqwest_method(&method), &target_url);
     let rb = copy_headers(&req, rb);
-
     let resp = match rb.body(body.to_vec()).send().await {
         Ok(r) => r,
-        Err(e) => {
-            tracing::error!("S3 proxy error: {e}");
-            return HttpResponse::InternalServerError().body("proxy error");
+        Err(_) => {
+            let rb = state.http_client.request(to_reqwest_method(&method), &target_url);
+            let rb = copy_headers(&req, rb);
+            match rb.body(body.to_vec()).send().await {
+                Ok(r) => r,
+                Err(e) => { tracing::error!("S3 proxy error: {e}"); return HttpResponse::InternalServerError().body("proxy error"); }
+            }
         }
     };
 

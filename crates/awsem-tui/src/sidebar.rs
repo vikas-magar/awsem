@@ -16,7 +16,7 @@ pub fn render(frame: &mut Frame, area: Rect, items: &[SidebarItem], active: usiz
     frame.render_widget(block, area);
 
     let mut lines = vec![Line::from(Span::styled(" AWS SERVICES ", theme::header()))];
-    lines.push(Line::from(Span::styled("─".repeat(inner.width as usize), theme::muted())));
+    lines.push(Line::from(Span::styled("─".repeat(inner.width as usize), theme::dim())));
 
     for (i, item) in items.iter().enumerate() {
         let label = format!(" [{}] {} {}", item.key, item.label, item.count);
@@ -26,7 +26,7 @@ pub fn render(frame: &mut Frame, area: Rect, items: &[SidebarItem], active: usiz
 
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(" SHORTCUTS ", theme::header())));
-    lines.push(Line::from(Span::styled("─".repeat(inner.width as usize), theme::muted())));
+    lines.push(Line::from(Span::styled("─".repeat(inner.width as usize), theme::dim())));
     lines.push(Line::from(Span::styled(" [?] Help", theme::sidebar())));
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(" [S] Start/Stop", theme::sidebar())));

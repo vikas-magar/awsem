@@ -7,10 +7,6 @@ use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, Salt
 use rand::rngs::OsRng;
 use serde_json::{Value, json};
 
-fn pool_id() -> &'static str {
-    "us-east-1_default"
-}
-
 #[tracing::instrument(skip(req, body, state))]
 pub async fn handle(
     req: HttpRequest,
@@ -47,8 +43,8 @@ pub async fn handle(
 async fn handle_sign_up(input: Value, state: &AppState) -> HttpResponse {
     let username = input.get("Username").and_then(|v| v.as_str()).unwrap_or("");
     let password = input.get("Password").and_then(|v| v.as_str()).unwrap_or("");
-    let pid = pool_id();
-    let arn = format!("arn:aws:cognito-idp:us-east-1:000000000000:userpool/{pid}");
+    let pid = &state.aws.default_pool_id;
+    let arn = state.aws.cognito_pool_arn(pid);
     if let Err(e) = store::create_user_pool(&state.db, pid, "default", &arn) {
         tracing::warn!("Failed to create Cognito user pool: {e}");
     }
@@ -76,7 +72,7 @@ async fn handle_sign_up(input: Value, state: &AppState) -> HttpResponse {
 
 async fn handle_confirm_sign_up(input: Value, state: &AppState) -> HttpResponse {
     let username = input.get("Username").and_then(|v| v.as_str()).unwrap_or("");
-    if let Err(e) = store::confirm_user(&state.db, username, pool_id()) {
+    if let Err(e) = store::confirm_user(&state.db, username, &state.aws.default_pool_id) {
         return awsem_core::error::AwsemError::NotFound(e).cognito_response();
     }
     HttpResponse::Ok().json(json!({}))
@@ -96,7 +92,7 @@ async fn handle_initiate_auth(input: Value, state: &AppState) -> HttpResponse {
         .get("PASSWORD")
         .and_then(|v| v.as_str())
         .unwrap_or("");
-    let user = match store::get_user_by_username(&state.db, pool_id(), username) {
+    let user = match store::get_user_by_username(&state.db, &state.aws.default_pool_id, username) {
         Ok(u) => u,
         Err(e) => return awsem_core::error::AwsemError::NotFound(e).cognito_response(),
     };
@@ -114,7 +110,7 @@ async fn handle_initiate_auth(input: Value, state: &AppState) -> HttpResponse {
         .cognito_response();
     }
     let (access, id, refresh) =
-        match jwt::create_tokens(&user.id, username, pool_id(), &state.jwt_secret) {
+        match jwt::create_tokens(&user.id, username, &state.aws.default_pool_id, &state.aws.region, &state.jwt_secret) {
             Ok(t) => t,
             Err(e) => return awsem_core::error::AwsemError::Internal(e).cognito_response(),
         };

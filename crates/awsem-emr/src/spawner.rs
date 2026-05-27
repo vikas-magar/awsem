@@ -54,17 +54,12 @@ pub async fn submit_k8s_job(
     namespace: &str,
     job_id: &str,
     job_name: &str,
-    release: &str,
-    emr_spark_image: Option<&str>,
+    emr_spark_image: &str,
     job_driver: &serde_json::Map<String, Value>,
     awsem_endpoint: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let image = if release.starts_with("emr-") {
-        emr_spark_image.unwrap_or("apache/spark:latest").to_string()
-    } else {
-        format!("public.ecr.aws/emr-on-eks/spark/{release}")
-    };
-    let spark_args = spark_params::build_args(job_driver, &image, namespace, job_id);
+    let image = emr_spark_image;
+    let spark_args = spark_params::build_args(job_driver, image, namespace, job_id);
     let job_obj: Job = serde_json::from_value(json!({
         "apiVersion": "batch/v1",
         "kind": "Job",

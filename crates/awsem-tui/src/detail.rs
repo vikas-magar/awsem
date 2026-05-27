@@ -15,7 +15,7 @@ pub fn render(frame: &mut Frame, area: Rect, title: &str, lines: &[(String, Stri
     let mut items = vec![Line::from("")];
     for (k, v) in lines {
         items.push(Line::from(vec![
-            Span::styled(format!(" {}: ", k), Style::default().fg(theme::LABEL)),
+            Span::styled(format!(" {}: ", k), Style::default().fg(theme::PURPLE)),
             Span::styled(v, Style::default().fg(theme::FG)),
         ]));
     }

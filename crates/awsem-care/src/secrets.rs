@@ -21,7 +21,7 @@ pub async fn create(state: web::Data<AdminState>, body: bytes::Bytes) -> HttpRes
     if name.is_empty() { return HttpResponse::BadRequest().json(json!({"error": "missing name"})); }
     let c = match state.db.lock() { Ok(c) => c, Err(e) => return HttpResponse::InternalServerError().json(json!({"error": e.to_string()})), };
     let id = uuid::Uuid::new_v4().to_string();
-    let arn = format!("arn:aws:secretsmanager:us-east-1:000000000000:secret:{name}");
+    let arn = state.aws.secrets_arn(name);
     let now = chrono::Utc::now().to_rfc3339();
     if let Err(e) = c.execute("INSERT INTO secrets_secrets (id, name, arn, description, tags_json, created_at, last_changed) VALUES (?1, ?2, ?3, ?4, '[]', ?5, ?5)", rusqlite::params![id, name, arn, desc, now]) { return HttpResponse::Conflict().json(json!({"error": e.to_string()})); }
     let vid = uuid::Uuid::new_v4().to_string();

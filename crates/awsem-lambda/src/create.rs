@@ -18,7 +18,7 @@ pub async fn create(state: web::Data<AppState>, body: bytes::Bytes) -> HttpRespo
     let role = input.get("Role").and_then(|v| v.as_str()).unwrap_or("");
     let image = input.get("Image").and_then(|v| v.as_str()).map(|s| s.to_string())
         .or_else(|| state.lambda_runtime_image.clone());
-    let arn = format!("arn:aws:lambda:us-east-1:000000000000:function:{name}");
+    let arn = state.aws.lambda_arn(name);
     let timeout = input.get("Timeout").and_then(|v| v.as_i64()).unwrap_or(3) as i32;
     let memory = input.get("MemorySize").and_then(|v| v.as_i64()).unwrap_or(128) as i32;
     let code_zip = input.pointer("/Code/ZipFile").and_then(|v| v.as_str())

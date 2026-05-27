@@ -62,8 +62,8 @@ pub async fn deploy(client: &Client, cfg: &RustFsConfig) -> Result<(), Box<dyn s
                             "name": "rustfs", "image": cfg.image,
                             "ports": [{"containerPort": 9000}, {"containerPort": 9001}],
                             "env": [
-                                {"name": "RUSTFS_ACCESS_KEY", "value": "awsem"},
-                                {"name": "RUSTFS_SECRET_KEY", "value": "awsem"},
+                                {"name": "RUSTFS_ACCESS_KEY", "value": &cfg.access_key},
+                                {"name": "RUSTFS_SECRET_KEY", "value": &cfg.secret_key},
                             ],
                             "volumeMounts": [{"name": "data", "mountPath": "/data"}]
                         }],

@@ -17,5 +17,6 @@ pub fn init_schema(conn: &DbConn) -> Result<(), Box<dyn std::error::Error>> {
     let _ = c.execute("ALTER TABLE lambda_functions ADD COLUMN image TEXT", []);
     let _ = c.execute("ALTER TABLE emr_job_runs ADD COLUMN logs TEXT", []);
     let _ = c.execute("ALTER TABLE emr_job_runs ADD COLUMN exit_code INTEGER", []);
+    let _ = c.execute("ALTER TABLE emr_job_runs ADD COLUMN step_id TEXT", []);
     Ok(())
 }

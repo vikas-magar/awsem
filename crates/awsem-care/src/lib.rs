@@ -10,6 +10,7 @@ use awsem_core::db::DbConn;
 pub struct AdminState {
     pub db: DbConn,
     pub log_file: String,
+    pub aws: awsem_core::aws::AwsConfig,
 }
 
 pub fn configure(cfg: &mut web::ServiceConfig) {

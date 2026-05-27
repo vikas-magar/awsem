@@ -34,27 +34,13 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         Span::styled(format!("  objects: {}", app.browser_items.len()), theme::muted()),
     ])), Rect::new(inner.x, y, inner.width, 1));
     y += 1;
-    frame.render_widget(Paragraph::new(Line::from(Span::styled(format!(" {crumb}"), theme::accent()))), Rect::new(inner.x, y, inner.width, 1));
+    frame.render_widget(Paragraph::new(Line::from(Span::styled(format!(" {crumb}"), theme::info()))), Rect::new(inner.x, y, inner.width, 1));
     y += 1;
 
-    let horiz = Layout::horizontal([Constraint::Length(16), Constraint::Min(26), Constraint::Length(26)]).split(Rect::new(inner.x, y, inner.width, vert[1].height));
-
-    // Navigator
-    let nav = render_panel_bg(frame, horiz[0], " NAVIGATOR ", app, 0);
-    let nr = (nav.height.saturating_sub(2)) as usize;
-    for i in 0..nr.min(app.browser_prefixes.len()) {
-        let idx = app.browser_prefix_scroll + i;
-        if idx >= app.browser_prefixes.len() { break; }
-        let sel = idx == app.browser_prefix_cursor && app.browser_focus == 0;
-        let st = if sel { theme::selected() } else { Style::default().fg(theme::FG) };
-        let trimmed = app.browser_prefixes[idx].trim_end_matches('/');
-        let name = trimmed.rsplit('/').next().unwrap_or(trimmed);
-        let ptr = if sel { "▶ " } else { "  " };
-        frame.render_widget(Paragraph::new(Line::from(Span::styled(format!("{ptr}{name}"), st))), Rect::new(nav.x, nav.y + 1 + i as u16, nav.width, 1));
-    }
+    let horiz = Layout::horizontal([Constraint::Min(30), Constraint::Length(26)]).split(Rect::new(inner.x, y, inner.width, vert[1].height));
 
     // Objects
-    let objs = render_panel_bg(frame, horiz[1], " OBJECTS ", app, 1);
+    let objs = render_panel_bg(frame, horiz[0], " OBJECTS ", app, 0);
     let mut y = objs.y + 1;
     let avail = objs.width.saturating_sub(2);
     let size_w = (avail * 2 / 10).clamp(6, 10);
@@ -64,11 +50,11 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let mut x = objs.x + 1;
     for (hdr, w) in &hcols {
         let sort = if *hdr == "Name" { if app.browser_sort_desc { " ▼" } else { " ▲" } } else { "" };
-        frame.render_widget(Paragraph::new(Line::from(Span::styled(format!("{hdr}{sort}"), Style::default().fg(theme::LABEL)))), Rect::new(x, y, *w, 1));
+        frame.render_widget(Paragraph::new(Line::from(Span::styled(format!("{hdr}{sort}"), theme::info()))), Rect::new(x, y, *w, 1));
         x += *w + 2;
     }
     y += 1;
-    frame.render_widget(Paragraph::new(Line::from(Span::styled("─".repeat(objs.width as usize), theme::muted()))), Rect::new(objs.x, y, objs.width, 1));
+    frame.render_widget(Paragraph::new(Line::from(Span::styled("─".repeat(objs.width as usize), theme::dim()))), Rect::new(objs.x, y, objs.width, 1));
     y += 1;
 
     let mr = (objs.y + objs.height).saturating_sub(y) as usize;
@@ -77,7 +63,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         let ii = app.browser_scroll + ri;
         if ii >= app.browser_items.len() { break; }
         let obj = &app.browser_items[ii];
-        let sel = ii == app.browser_cursor && app.browser_focus == 1;
+        let sel = ii == app.browser_cursor && app.browser_focus == 0;
         let st = if sel { theme::selected() } else { Style::default().fg(theme::FG) };
         let icon = if obj.is_folder { "▶ " } else { "  " };
         let vals = [format!("{}{}", icon, obj.key), obj.size_str.clone(), obj.modified.clone()];
@@ -94,14 +80,14 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     }
 
     // Inspector
-    let insp = render_panel_bg(frame, horiz[2], " INSPECTOR ", app, 2);
+    let insp = render_panel_bg(frame, horiz[1], " INSPECTOR ", app, 1);
     if app.browser_focus == 1 && let Some(obj) = app.browser_items.get(app.browser_cursor) {
         let pairs: &[(&str, &str)] = if obj.is_folder { &[("Type", "folder"), ("Prefix", &obj.key)] } else {
             &[("Name", obj.key.rsplit('/').next().unwrap_or(&obj.key)), ("Size", &obj.size_str), ("Modified", &obj.modified), ("Storage", &obj.storage_class)]
         };
         for (i, (k, v)) in (insp.y + 1..).zip(pairs.iter()) {
             frame.render_widget(Paragraph::new(Line::from(vec![
-                Span::styled(format!(" {k}: "), Style::default().fg(theme::LABEL)),
+                Span::styled(format!(" {k}: "), Style::default().fg(theme::PURPLE)),
                 Span::styled(*v, Style::default().fg(theme::FG)),
             ])), Rect::new(insp.x, i, insp.width, 1));
         }

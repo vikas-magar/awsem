@@ -27,30 +27,32 @@ async fn main() -> anyhow::Result<()> {
     let s3_endpoint = if !config.resolved_no_s3() {
         if let Some(ref ep) = config.s3_endpoint { ep.clone() }
         else if let Some(ref client) = kube_client {
-            let s3_cfg = awsem_s3::RustFsConfig::new(config.resolved_k8s_namespace(), config.rustfs_image.as_deref().unwrap_or("rustfs/rustfs:latest"), config.resolved_rustfs_pvc_size());
+            let s3_cfg = awsem_s3::RustFsConfig::new(config.resolved_k8s_namespace(), config.resolved_rustfs_image(), config.resolved_rustfs_pvc_size(), config.resolved_rustfs_access_key(), config.resolved_rustfs_secret_key());
             awsem_s3::deploy::ensure(client, &s3_cfg).await.map_err(logging::map_err)?
         } else { tracing::warn!("No K8s client, S3 disabled"); String::new() }
     } else { String::new() };
 
     let http_client = reqwest::Client::new();
+    let s3_client = reqwest::Client::builder().pool_max_idle_per_host(0).build().map_err(|e| anyhow::anyhow!("{e}"))?;
     let ns = config.resolved_k8s_namespace().to_string();
     let port = config.resolved_port();
     let host_ip = config.resolved_host_ip();
 
     let awsem_endpoint = format!("http://{host_ip}:{port}");
+    let aws = config.resolved_aws_config();
 
-    let s3_state = awsem_s3::S3State { rustfs_url: s3_endpoint.clone(), http_client: http_client.clone(), db: conn.clone(), event_bus: event_bus.clone() };
-    let cognito_state = awsem_cognito::AppState { db: conn.clone(), jwt_secret: config.resolved_jwt_secret().to_string() };
-    let secrets_state = awsem_secretsmanager::AppState { db: conn.clone() };
-    let emr_state = awsem_emr::AppState { db: conn.clone(), event_bus: event_bus.clone(), k8s_client: kube_client.clone(), namespace: ns.clone(), emr_spark_image: config.emr_spark_image.clone(), awsem_endpoint };
-    let lambda_state = awsem_lambda::AppState { db: conn.clone(), event_bus: event_bus.clone(), data_dir: config.resolved_data_dir().map(String::from), kube_client: kube_client.clone(), namespace: ns.clone(), lambda_runtime_image: config.lambda_runtime_image.clone() };
+    let s3_state = awsem_s3::S3State { rustfs_url: s3_endpoint.clone(), http_client: s3_client, db: conn.clone(), event_bus: event_bus.clone() };
+    let cognito_state = awsem_cognito::AppState { db: conn.clone(), jwt_secret: config.resolved_jwt_secret().to_string(), aws: aws.clone() };
+    let secrets_state = awsem_secretsmanager::AppState { db: conn.clone(), aws: aws.clone() };
+    let emr_state = awsem_emr::AppState { db: conn.clone(), event_bus: event_bus.clone(), k8s_client: kube_client.clone(), namespace: ns.clone(), emr_spark_image: config.resolved_emr_spark_image().to_string(), awsem_endpoint, aws: aws.clone() };
+    let lambda_state = awsem_lambda::AppState { db: conn.clone(), event_bus: event_bus.clone(), data_dir: config.resolved_data_dir().map(String::from), kube_client: kube_client.clone(), namespace: ns.clone(), lambda_runtime_image: config.lambda_runtime_image.clone(), aws: aws.clone() };
 
     if !config.resolved_no_emr() {
-        let (db, kc, url, client, bus) = (conn.clone(), kube_client.clone(), s3_endpoint.clone(), http_client.clone(), event_bus.clone());
-        tokio::spawn(async move { awsem_emr::job_watcher::watch_jobs(db, kc, url, client, bus).await; });
+        let (db, kc, url, client, bus, a) = (conn.clone(), kube_client.clone(), s3_endpoint.clone(), http_client.clone(), event_bus.clone(), aws.clone());
+        tokio::spawn(async move { awsem_emr::job_watcher::watch_jobs(db, kc, url, client, bus, a).await; });
     }
 
-    let admin_state = awsem_care::AdminState { db: conn.clone(), log_file: log_file.clone() };
+    let admin_state = awsem_care::AdminState { db: conn.clone(), log_file: log_file.clone(), aws: aws.clone() };
     let lambda_trigger_state = lambda_state.clone();
     tokio::spawn(async move { awsem_lambda::trigger::listen(lambda_trigger_state).await; });
 
@@ -82,7 +84,7 @@ async fn main() -> anyhow::Result<()> {
     if let Err(e) = server.await { tracing::error!("Server exited with error: {e}"); }
 
     if let Some(ref client) = kube_client {
-        let s3_cfg = awsem_s3::RustFsConfig::new(&ns, "", config.resolved_rustfs_pvc_size());
+        let s3_cfg = awsem_s3::RustFsConfig::new(&ns, "", config.resolved_rustfs_pvc_size(), config.resolved_rustfs_access_key(), config.resolved_rustfs_secret_key());
         if let Err(e) = awsem_s3::deploy::cleanup(client, &s3_cfg).await { tracing::warn!("Failed to clean up RustFS: {e}"); }
     }
 

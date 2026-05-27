@@ -4,10 +4,6 @@ use crate::AppState;
 use actix_web::{HttpRequest, HttpResponse, web};
 use serde_json::{Value, json};
 
-fn make_arn(name: &str) -> String {
-    format!("arn:aws:secretsmanager:us-east-1:000000000000:secret:{name}")
-}
-
 fn find_secret(input: &Value, state: &AppState) -> Result<store::Secret, HttpResponse> {
     let secret_id = input.get("SecretId").and_then(|v| v.as_str()).unwrap_or("");
     queries::get_secret_by_name(&state.db, secret_id)
@@ -42,7 +38,7 @@ async fn create_secret(input: Value, state: &AppState) -> HttpResponse {
     let description = input.get("Description").and_then(|v| v.as_str());
     let kms_key_id = input.get("KmsKeyId").and_then(|v| v.as_str());
     let id = uuid::Uuid::new_v4().to_string();
-    let arn = make_arn(name);
+    let arn = state.aws.secrets_arn(name);
     match store::create_secret(&state.db, &id, name, &arn, secret_string, description, kms_key_id) {
         Ok(version_id) => HttpResponse::Ok().json(json!({"ARN": arn, "Name": name, "VersionId": version_id})),
         Err(e) => awsem_core::error::AwsemError::AlreadyExists(e).secrets_response(),

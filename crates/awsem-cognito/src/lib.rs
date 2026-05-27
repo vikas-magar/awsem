@@ -11,6 +11,7 @@ use awsem_core::db::DbConn;
 pub struct AppState {
     pub db: DbConn,
     pub jwt_secret: String,
+    pub aws: awsem_core::aws::AwsConfig,
 }
 
 pub struct CognitoGuard;

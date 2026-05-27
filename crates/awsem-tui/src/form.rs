@@ -24,7 +24,7 @@ pub struct FormState {
 #[derive(Clone, PartialEq)]
 pub enum FormAction {
     CreateBucket, CreateUser, CreateSecret, EditSecret(String),
-    InvokeLambda(String), EmrSubmit(String), S3Upload(String, String), LogFilter,
+    InvokeLambda(String), EmrSubmit(String), LogFilter,
 }
 
 pub enum FormResult { Submitted(FormAction), Cancelled, Continue }
@@ -55,9 +55,6 @@ pub fn init(action: &FormAction) -> FormState {
             FormField { label: "Execution Role ARN", value: "arn:aws:iam::123456789012:role/emr-role".into(), required: false, sensitive: false },
             FormField { label: "Release Label", value: "emr-7.5.0-latest".into(), required: false, sensitive: false },
             FormField { label: "Spark Submit Params", value: "--conf spark.executor.instances=1".into(), required: false, sensitive: false },
-        ]),
-        FormAction::S3Upload(_, _) => ("Upload to S3", vec![
-            FormField { label: "Local File Path", value: String::new(), required: true, sensitive: false },
         ]),
         FormAction::LogFilter => ("Log Filter", vec![
             FormField { label: "Filter Pattern", value: String::new(), required: false, sensitive: false },
@@ -90,7 +87,7 @@ pub fn render(frame: &mut Frame, area: Rect, form: &FormState) {
             Span::styled(format!("{}{}:{} ", prefix, field.label, req), label_style),
             Span::styled(display, Style::default().fg(theme::FG)),
         ]));
-        lines.push(Line::from(Span::styled("".repeat(w as usize), theme::muted())));
+        lines.push(Line::from(Span::styled("".repeat(w as usize), theme::dim())));
     }
     if let Some(ref err) = form.error {
         lines.push(Line::from(Span::styled(format!(" ⚠ {}", err), Style::default().fg(theme::ERROR))));

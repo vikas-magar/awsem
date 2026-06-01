@@ -1,0 +1,44 @@
+# awsem configuration
+# All fields are optional — defaults shown in comments.
+
+port = 4566
+host_ip = "10.10.10.41"                   # IP/host for spark agent to reach awsem from K8s pods
+region = "us-east-1"
+account_id = "000000000000"
+aws_access_key_id = "awsem"
+aws_secret_access_key = "awsem"
+default_pool_id = "us-east-1_default"     # Cognito user pool ID
+
+# Paths
+db_path = "/Users/anvi/.config/awsem/awsem.db"
+data_dir = "/Users/anvi/.config/awsem/data"
+log_dir = "/Users/anvi/.config/awsem/logs"
+log_level = "info"
+# jwt_secret — not set; auto-generated UUID on each start. Set to a fixed value for stable JWT tokens across restarts.
+
+# K8s
+k8s_namespace = "awsem"
+kubeconfig = "/Users/anvi/.kube/config"
+
+# S3 / RustFS
+s3_endpoint = "http://localhost:9000"                          # external S3 endpoint (disables RustFS deploy)
+rustfs_image = "rustfs/rustfs:latest"
+rustfs_pvc_size = "10Gi"
+rustfs_access_key = "awsem"
+rustfs_secret_key = "awsem"
+no_s3 = false
+
+# EMR
+emr_spark_image = "spark-s3a:latest"      # custom image with awsem-spark-agent + S3A JARs
+emr_poll_interval = 15                    # seconds between job status polls
+no_emr = false
+
+# Lambda
+lambda_runtime_image = ""                 # required for invoke (e.g. public.ecr.aws/lambda/python:3.12)
+lambda_cpu = "250m"
+lambda_memory = "256Mi"
+no_lambda = false
+
+# Spark resource defaults
+spark_cpu = "500m"
+spark_memory = "512Mi"
